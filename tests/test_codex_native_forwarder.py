@@ -2163,7 +2163,7 @@ async def test_post_session_event_inner_classifies_ambiguous_skip() -> None:
     An ambiguous conversation-item transport failure surfaces as ambiguous (#1579).
 
     The inner used to conflate this with a proven-undelivered failure (both
-    returned ``None``); replay must be able to tell them apart.
+    returned ``None``); forensic diagnosis must be able to tell them apart.
     """
     client = _RaisingPostClient(
         httpx.ReadTimeout("response lost", request=httpx.Request("POST", "http://test"))
@@ -2179,6 +2179,37 @@ async def test_post_session_event_inner_classifies_ambiguous_skip() -> None:
     assert result.transport_error == "ReadTimeout"
     # Ambiguous items are abandoned immediately — no retries.
     assert client.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_post_session_event_inner_respects_single_attempt_and_timeout() -> None:
+    """Single-attempt callers fail fast with their per-request timeout."""
+    request = httpx.Request("POST", "http://test")
+    client = _SequencedPostClient(
+        [
+            httpx.Response(503, request=request),
+            httpx.Response(202, request=request),
+        ]
+    )
+
+    result = await fwd._post_session_event_inner(
+        client,
+        "conv_codex1",
+        event_type="external_output_text_delta",
+        data={"delta": "preview"},
+        max_attempts=1,
+        timeout=5.0,
+    )
+
+    assert client.calls == [
+        (
+            "/v1/sessions/conv_codex1/events",
+            {"type": "external_output_text_delta", "data": {"delta": "preview"}},
+            5.0,
+        )
+    ]
+    assert result.response is not None
+    assert result.response.status_code == 503
 
 
 @pytest.mark.asyncio
@@ -2639,8 +2670,8 @@ async def test_turn_started_waits_for_replay_before_replacing_active_turn(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_cancelled_idempotent_item_is_dead_lettered_for_safe_replay(tmp_path: Path) -> None:
-    """Shutdown during an in-flight completion keeps a replayable disk record."""
+async def test_cancelled_idempotent_item_is_dead_lettered_for_forensics(tmp_path: Path) -> None:
+    """Shutdown during an in-flight completion keeps a forensic disk record."""
 
     class _BlockingPostClient:
         def __init__(self) -> None:
@@ -2784,131 +2815,6 @@ async def test_post_session_event_dead_letters_records_http_status(
     assert record["http_status"] == 503
     assert record["delivered_ambiguous"] is False
     assert record["transport_error"] is None
-
-
-@pytest.mark.asyncio
-async def test_replay_dead_letters_on_startup_reposts_proven_undelivered(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """
-    On startup, a proven-undelivered record is re-POSTed and removed (#1579).
-
-    :param tmp_path: Pytest temp dir standing in for the bridge dir.
-    :param monkeypatch: Pytest patcher (auto-restores the stubbed inner).
-    """
-    fwd.append_dead_letter(
-        tmp_path,
-        session_id="conv_codex1",
-        event_type="external_conversation_item",
-        payload={"item_type": "message"},
-        reason="proven-undelivered transport failure after retries",
-        delivered_ambiguous=False,
-        http_status=None,
-        transport_error="ConnectError",
-    )
-
-    posted: list[dict] = []
-
-    async def _ok_inner(client, session_id, *, event_type, data, max_attempts, timeout):
-        posted.append(
-            {
-                "session_id": session_id,
-                "event_type": event_type,
-                "data": data,
-                "max_attempts": max_attempts,
-                "timeout": timeout,
-            }
-        )
-        return fwd._PostResult(
-            response=httpx.Response(200, request=httpx.Request("POST", "http://test"))
-        )
-
-    monkeypatch.setattr(fwd, "_post_session_event_inner", _ok_inner)
-    await fwd._replay_dead_letters_on_startup(MagicMock(), tmp_path)
-
-    assert len(posted) == 1
-    assert posted[0]["session_id"] == "conv_codex1"
-    assert posted[0]["event_type"] == "external_conversation_item"
-    assert posted[0]["data"] == {"item_type": "message"}
-    # Replay re-POSTs with a single attempt and a short timeout so a large file
-    # or a hung server cannot stall startup.
-    assert posted[0]["max_attempts"] == 1
-    assert posted[0]["timeout"] == fwd._REPLAY_POST_TIMEOUT_SECONDS
-    # Delivered → record removed.
-    assert not (tmp_path / "dead_letter.jsonl").exists()
-
-
-@pytest.mark.asyncio
-async def test_replay_dead_letters_on_startup_skips_ambiguous(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """
-    On startup, an ambiguous record is never re-POSTed and is retained (#1579).
-
-    :param tmp_path: Pytest temp dir standing in for the bridge dir.
-    :param monkeypatch: Pytest patcher (auto-restores the stubbed inner).
-    """
-    fwd.append_dead_letter(
-        tmp_path,
-        session_id="conv_codex1",
-        event_type="external_conversation_item",
-        payload={"item_type": "message"},
-        reason="ambiguous transport failure (may already be committed)",
-        delivered_ambiguous=True,
-    )
-
-    called = False
-
-    async def _inner(client, session_id, *, event_type, data, **_kwargs):
-        nonlocal called
-        called = True
-        return fwd._PostResult(
-            response=httpx.Response(200, request=httpx.Request("POST", "http://test"))
-        )
-
-    monkeypatch.setattr(fwd, "_post_session_event_inner", _inner)
-    await fwd._replay_dead_letters_on_startup(MagicMock(), tmp_path)
-
-    assert called is False
-    # Ambiguous record retained as a forensic record.
-    assert (tmp_path / "dead_letter.jsonl").exists()
-
-
-class _RecordingPostClient:
-    """Async client stub that records each ``post`` call's kwargs."""
-
-    def __init__(self, response: httpx.Response) -> None:
-        self._response = response
-        self.calls: list[dict] = []
-
-    async def post(self, url: str, **kwargs: object) -> httpx.Response:
-        self.calls.append(kwargs)
-        return self._response
-
-
-@pytest.mark.asyncio
-async def test_post_session_event_inner_single_attempt_and_timeout() -> None:
-    """
-    ``max_attempts=1`` makes one POST (no retry) and ``timeout`` is threaded through.
-
-    Replay relies on both so a hung server fails fast and startup is bounded (#1579).
-    """
-    client = _RecordingPostClient(
-        httpx.Response(503, request=httpx.Request("POST", "http://test"))
-    )
-    result = await fwd._post_session_event_inner(
-        client,
-        "conv_codex1",
-        event_type="external_conversation_item",
-        data={"item_type": "message"},
-        max_attempts=1,
-        timeout=5.0,
-    )
-    # A single attempt even though 503 is normally retryable.
-    assert len(client.calls) == 1
-    assert client.calls[0]["timeout"] == 5.0
-    assert result.response is not None
-    assert result.response.status_code == 503
 
 
 async def test_post_session_event_records_connectivity_failure_for_watchdog(

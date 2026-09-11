@@ -1956,6 +1956,51 @@ def test_supervise_forwarder_subscribes_existing_client_after_thread_discovery(
     assert fake_client.closed
 
 
+def test_supervise_forwarder_leaves_dead_letters_forensic_only(tmp_path: Path) -> None:
+    """Codex startup must not re-POST or rewrite persisted dead letters."""
+    fake_client = _FakeCodexAppServerClient()
+    dead_letter_path = tmp_path / "dead_letter.jsonl"
+    dead_letter_bytes = (
+        json.dumps(
+            {
+                "session_id": "conv_123",
+                "event_type": "external_conversation_item",
+                "payload": {
+                    "item_type": "message",
+                    "source_id": "forensic-only-source",
+                },
+                "reason": "retryable HTTP failure after retries",
+                "delivered_ambiguous": False,
+                "http_status": 503,
+            }
+        )
+        + "\n"
+    ).encode()
+    dead_letter_path.write_bytes(dead_letter_bytes)
+    posted_bodies: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        posted_bodies.append(request.content.decode())
+        return httpx.Response(202)
+
+    async def run() -> None:
+        await codex_native_forwarder.supervise_forwarder(
+            base_url="http://test",
+            headers={},
+            session_id="conv_123",
+            bridge_dir=tmp_path,
+            app_server_url=str(tmp_path / "app-server.sock"),
+            thread_id="thread_123",
+            client=fake_client,  # type: ignore[arg-type]
+            ap_transport=httpx.MockTransport(handler),
+        )
+
+    asyncio.run(run())
+
+    assert dead_letter_path.read_bytes() == dead_letter_bytes
+    assert all("forensic-only-source" not in body for body in posted_bodies)
+
+
 def test_supervise_forwarder_resumes_when_it_opens_client(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

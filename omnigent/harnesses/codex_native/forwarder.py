@@ -55,10 +55,8 @@ from omnigent.native._native_forwarder_health import (
     record_post_failure as record_native_post_failure,
 )
 from omnigent.native._native_post_delivery import (
-    RepostResult,
     append_dead_letter,
     post_may_have_been_delivered,
-    replay_dead_letters,
 )
 from omnigent.util.json_types import JsonObject as _JsonObject
 
@@ -84,15 +82,6 @@ _POST_RETRY_MAX_DELAY_SECONDS = 30.0
 _POST_RETRY_STATUS_CODES = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
 _DURABLE_ITEM_POST_TIMEOUT_SECONDS = 5.0
 _SOURCE_ID_MAX_CHARS = 256
-# Startup dead-letter replay budget (#1579). Bounded so a large dead-letter file
-# or a slow/hung server cannot stall forwarder startup: each re-POST is a single
-# attempt (its natural retry is the next startup) with a short timeout (vs the
-# 30s live client default) so a hung server fails fast; at most
-# ``_REPLAY_MAX_RECORDS`` are sent and the whole drain is abandoned after
-# ``_REPLAY_DEADLINE_SECONDS``. Leftovers are deferred to a later startup.
-_REPLAY_MAX_RECORDS = 500
-_REPLAY_POST_TIMEOUT_SECONDS = 5.0
-_REPLAY_DEADLINE_SECONDS = 30.0
 _DELTA_FLUSH_INTERVAL_SECONDS = 0.05
 _DELTA_FLUSH_CHAR_THRESHOLD = 8 * 1024
 # Transient output can be discarded because completed items are persisted
@@ -2061,11 +2050,6 @@ async def supervise_forwarder(
         timeout=httpx.Timeout(30.0),
         transport=ap_transport,
     ) as ap_client:
-        # Recover proven-undelivered dead-lettered forwards now that the
-        # server may be reachable again (host/server returned after an
-        # outage or restart). Runs before live forwarding begins, so no
-        # other writer races the dead-letter files (#1579).
-        await _replay_dead_letters_on_startup(ap_client, bridge_dir)
         # Synthesize the thread's MCP startup round (see the comment on
         # _CODEX_MCP_STARTUP_STATUS_METHOD): the fresh-launch forwarder
         # starts right at thread creation, which is when codex boots its
@@ -7093,82 +7077,20 @@ def _note_forward_failure(event_type: str) -> None:
         _forward_health.degraded_logged = True
 
 
-async def _replay_dead_letters_on_startup(
-    ap_client: httpx.AsyncClient,
-    bridge_dir: Path,
-) -> None:
-    """
-    Re-POST proven-undelivered dead-lettered forwards on forwarder startup (#1579).
-
-    Best-effort recovery for the realistic case — the host/server returned after
-    an outage or a restart. Delegates to the shared
-    :func:`replay_dead_letters` drain, supplying a re-POST that routes each
-    record to its recorded session via :func:`_post_session_event_inner` (the
-    inner so a re-failure does not double dead-letter through the wrapper).
-    Never raises: a replay failure must not block live forwarding.
-
-    :param ap_client: HTTP client for Omnigent event posts.
-    :param bridge_dir: Native Codex bridge directory holding the dead-letter files.
-    :returns: None.
-    """
-
-    async def _repost(record: dict[str, object]) -> RepostResult:
-        session_id = record["session_id"]
-        event_type = record["event_type"]
-        payload = record["payload"]
-        assert isinstance(session_id, str)
-        assert isinstance(event_type, str)
-        assert isinstance(payload, dict)
-        result = await _post_session_event_inner(
-            ap_client,
-            session_id,
-            event_type=event_type,
-            data=payload,
-            max_attempts=1,
-            timeout=_REPLAY_POST_TIMEOUT_SECONDS,
-        )
-        response = result.response
-        if response is None:
-            return RepostResult(
-                delivered=False,
-                delivered_ambiguous=result.delivered_ambiguous,
-                http_status=None,
-            )
-        delivered = response.status_code < 400
-        return RepostResult(
-            delivered=delivered,
-            delivered_ambiguous=False,
-            http_status=None if delivered else response.status_code,
-        )
-
-    try:
-        await replay_dead_letters(
-            bridge_dir,
-            repost=_repost,
-            retryable_status_codes=_POST_RETRY_STATUS_CODES,
-            logger_name=__name__,
-            max_records=_REPLAY_MAX_RECORDS,
-            deadline_seconds=_REPLAY_DEADLINE_SECONDS,
-        )
-    except Exception:  # noqa: BLE001 - replay must never block forwarder startup.
-        _logger.warning("Codex forwarder dead-letter replay failed", exc_info=True)
-
-
 @dataclass(frozen=True)
 class _PostResult:
     """
     Classified outcome of one :func:`_post_session_event_inner` call (#1579).
 
-    Surfaces *why* a POST failed so the caller can dead-letter with the
-    structured classification replay needs — distinguishing the two ``None``
-    cases the inner used to conflate: an ambiguous-skip (the item may already
-    be committed) from a proven-undelivered transport failure after retries.
+    Surfaces *why* a POST failed so the forensic dead letter distinguishes the
+    two ``None`` cases the inner used to conflate: an ambiguous-skip (the item
+    may already be committed) from a proven-undelivered transport failure.
 
     :param response: Final HTTP response, or ``None`` when no response was
         seen (a transport failure, or an ambiguous conversation-item skip).
     :param delivered_ambiguous: ``True`` when the POST was abandoned after an
         ambiguous transport failure (request sent, response lost), so the item
-        may already be committed server-side — never safe to replay.
+        may already be committed server-side.
     :param transport_error: Transport-error class name when a POST raised
         without a response, e.g. ``"ConnectError"``; ``None`` when the server
         responded.
@@ -7195,8 +7117,8 @@ async def _post_session_event(
     outcome — a sub-400 response is a success; ``None`` or a >=400 final
     response is a permanent failure — and updates :data:`_forward_health`
     so a sustained outage escalates to a single ERROR instead of silently
-    dropping events. On a durable-event failure it dead-letters the dropped
-    payload with the structured classification replay needs (#1579).
+    dropping events. On a durable-event failure it records the dropped payload
+    and delivery classification for forensic diagnosis.
 
     :param client: HTTP client for Omnigent event posts.
     :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
@@ -7265,11 +7187,8 @@ async def _post_session_event_inner(
     :param max_attempts: Maximum POST attempts before giving up, e.g. ``3``;
         ``None`` retries transient failures indefinitely and requires an
         idempotent event payload.
-        Startup dead-letter replay passes ``1`` — its natural retry cadence is
-        the next startup, so an in-call retry loop only adds latency (#1579).
     :param timeout: Optional per-request timeout in seconds overriding the
-        client default, e.g. ``5.0``. Replay passes a short value so a hung
-        server fails fast instead of stalling startup on the 30s client default.
+        client default, e.g. ``5.0``.
     :returns: A :class:`_PostResult` carrying the final response, or — for a
         legacy conversation item without ``source_id`` — whether the POST was
         abandoned after an ambiguous transport failure versus a proven-

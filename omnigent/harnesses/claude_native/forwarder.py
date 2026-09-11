@@ -1973,7 +1973,7 @@ async def _forward_one_subagent(
                 },
                 reason=drop_reason,
                 delivered_ambiguous=False,
-                # Keep startup replay from retrying a payload that cannot fit.
+                # Preserve the server's permanent rejection for diagnosis.
                 http_status=413,
             )
             completed_items.extend(batch)
@@ -2374,10 +2374,9 @@ async def _forward_available_subagents(
                     # attach. Park the child too rather than re-resolving it every
                     # tick; the empty child id filters it out of the tail loops.
                     if subagent_id not in updated.subagents:
-                        # No dead letter: the child can't be replayed anywhere
-                        # correct — its parent conversation never existed, and a
-                        # replay would re-post it under the root session and
-                        # flatten the hierarchy. The WARNING is the recovery signal.
+                        # No dead letter: the parent conversation never existed,
+                        # so the record would lack a valid target. The warning is
+                        # the forensic signal.
                         _logger.warning(
                             "Parking claude-native sub-agent whose parent was "
                             "dropped; parent_session=%s subagent_id=%s "
@@ -4303,7 +4302,7 @@ async def _forward_available_items(
                     _http_status_for_log(exc),
                     extra={"session_id": session_id},
                 )
-                # Dead-letter the dropped item for recovery (#1120; replay #1579).
+                # Preserve the dropped item as bounded forensic evidence (#1120).
                 append_dead_letter(
                     bridge_dir,
                     session_id=session_id,
@@ -4316,7 +4315,7 @@ async def _forward_available_items(
                     reason="permanent HTTP failure after retries",
                     # Claude only dead-letters permanent 4xx (it retries
                     # transient failures forever), so the server proved it
-                    # rejected the item: never ambiguous, never replayable (#1579).
+                    # rejected the item and delivery is not ambiguous.
                     delivered_ambiguous=False,
                     http_status=_http_status_for_log(exc),
                 )

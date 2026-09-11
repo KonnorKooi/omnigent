@@ -3156,7 +3156,7 @@ async def test_forwarder_drops_poison_item_after_bounded_permanent_retries(
     should not be reposted forever at the poll interval. After the
     retry budget is exhausted, the forwarder emits a failed status,
     marks the source id handled, persists the new byte cursor, and
-    dead-letters the dropped item to disk so it is recoverable (#1120).
+    dead-letters the dropped item to disk for forensic diagnosis (#1120).
     """
     bridge_dir = tmp_path / "bridge"
     transcript_path = tmp_path / "session.jsonl"
@@ -3243,8 +3243,8 @@ async def test_forwarder_drops_poison_item_after_bounded_permanent_retries(
     assert second.seen_source_ids == ("poison-item:0:message",)
     assert persisted["byte_offset"] == transcript_path.stat().st_size
     assert persisted["seen_source_ids"] == ["poison-item:0:message"]
-    # The dropped item is dead-lettered to disk so it is recoverable
-    # instead of silently lost (#1120).
+    # The dropped item is dead-lettered to disk for forensic diagnosis
+    # instead of disappearing silently (#1120).
     dead_letter = (bridge_dir / "dead_letter.jsonl").read_text("utf-8").splitlines()
     assert len(dead_letter) == 1
     record = json.loads(dead_letter[0])
@@ -5498,9 +5498,8 @@ async def test_subagent_watcher_parks_child_of_a_parked_parent(
     assert forwarder._read_subagent_forward_state(bridge_dir) == state
     assert "whose parent was dropped" in caplog.text
 
-    # No dead letter: a replay would re-post the child under the root session and
-    # flatten the hierarchy, so the child is parked (WARNING only), not recorded
-    # for replay.
+    # No dead letter: the missing parent leaves no valid target, so the child is
+    # parked and the warning is the forensic signal.
     assert not (bridge_dir / "dead_letter.jsonl").exists()
 
 
@@ -6714,7 +6713,7 @@ async def test_concurrent_subagent_502s_recover_without_phantom_completion(
 
 @pytest.mark.asyncio
 async def test_persistent_subagent_502_ends_as_explicit_failure(tmp_path: Path) -> None:
-    """A child that exhausts 502 retries fails with recoverable dead letters."""
+    """A child that exhausts 502 retries fails with forensic dead letters."""
     bridge_dir = tmp_path / "bridge"
     bridge_dir.mkdir()
     transcript_path = tmp_path / "session.jsonl"
