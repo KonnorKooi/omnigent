@@ -11,7 +11,7 @@
 // without importing the block dispatcher that renders them.
 
 import type React from "react";
-import { useMemo } from "react";
+import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { defaultRemarkPlugins } from "streamdown";
 import remarkBreaks from "remark-breaks";
 import { normalizeExplicitMathDelimiters } from "@/components/ai-elements/mathMarkdown";
@@ -294,6 +294,46 @@ const FILE_PATH_AWARE_COMPONENTS = {
   a: WorkspaceFileLink,
 };
 
+/**
+ * Renders a markdown link as plain text, showing its target rather than
+ * linking to it.
+ *
+ * Agent-authored transcript text is attacker-authorable. On a surface that
+ * reads someone else's session, a live anchor is a navigation channel out of
+ * a page that otherwise offers none — so the link is flattened. The URL is
+ * still printed: a reader auditing the transcript has to be able to see what
+ * was linked.
+ */
+function InertLink({ href, children }: { href?: string; children?: ReactNode }) {
+  const target = typeof href === "string" ? href : "";
+  const label = typeof children === "string" ? children : null;
+  // Skip the parenthetical when the text already IS the URL (an autolink),
+  // which would otherwise print it twice.
+  const showTarget = target !== "" && label !== target;
+  return (
+    <span>
+      {children}
+      {showTarget ? <span className="text-muted-foreground"> ({target})</span> : null}
+    </span>
+  );
+}
+
+/** Component map for surfaces that must not produce followable links. */
+const INERT_LINK_COMPONENTS = {
+  ...FILE_PATH_AWARE_COMPONENTS,
+  a: InertLink,
+};
+
+/**
+ * When true, markdown rendered below this provider produces no anchors.
+ *
+ * A context rather than a prop because the flag has to reach markdown nested
+ * deep inside `BlockRenderer`'s dispatch, and threading it through every
+ * intermediate component would put a security-relevant default in many hands.
+ * Defaults to false, so only a surface that opts in is affected.
+ */
+export const InertLinksContext = createContext(false);
+
 // How often the live (growing) assistant bubble re-parses its markdown. The
 // store pump commits a new, longer text up to once per animation frame (~60/s);
 // without this the whole accumulated message is re-parsed on every commit. ~10/s
@@ -389,7 +429,8 @@ export function FilePathAwareMessageResponse({
   breaks = false,
   ...props
 }: React.ComponentProps<typeof MessageResponse> & { breaks?: boolean }) {
-  const components = FILE_PATH_AWARE_COMPONENTS;
+  const inertLinks = useContext(InertLinksContext);
+  const components = inertLinks ? INERT_LINK_COMPONENTS : FILE_PATH_AWARE_COMPONENTS;
 
   // Extend (don't replace) Streamdown's defaults so remark-gfm survives;
   // append remark-breaks only when `breaks` is requested. When `breaks` is

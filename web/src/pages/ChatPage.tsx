@@ -2169,6 +2169,7 @@ export function composerHarnessLabel(
   if (modelPickerKind === "codex") return "Codex";
   if (modelPickerKind === "cursor") return "Cursor";
   if (modelPickerKind === "kiro") return "Kiro";
+  if (modelPickerKind === "antigravity") return "Antigravity";
   if (modelPickerKind === "opencode") return "OpenCode";
   const display = agentName ? agentDisplayLabel(agentName) : null;
   const harness = sessionHarness ? (harnessLabels[sessionHarness] ?? null) : null;
@@ -4103,7 +4104,8 @@ const PI_NATIVE_EFFORT_LEVELS = [
   "max",
 ] as const;
 
-type NativeModelPickerKind = "claude" | "codex" | "cursor" | "kiro" | "opencode" | "pi";
+type NativeModelPickerKind =
+  "antigravity" | "claude" | "codex" | "cursor" | "kiro" | "opencode" | "pi";
 
 type LabelSource = { labels?: Record<string, string | null> | null } | null | undefined;
 
@@ -4194,6 +4196,10 @@ export function modelPickerKindForConv(
       // cursor/opencode there is no terminal->web model mirror, so the picker
       // reflects the pre-launch ``model_override`` selection.
       return "kiro";
+    case "antigravity-native-ui":
+      // Launch-only like kiro: agy takes ``--model`` at launch and lists the
+      // account's entitled models via ``agy models``.
+      return "antigravity";
     case "opencode-native-ui":
       // Like cursor: a vendor-owns-model wrapper that mirrors its live TUI
       // model into the session ``model_override`` (the forwarder's terminal→web
@@ -4716,6 +4722,7 @@ function useResolvedComposerModel(
     modelPickerKind === "codex" ||
     modelPickerKind === "cursor" ||
     modelPickerKind === "kiro" ||
+    modelPickerKind === "antigravity" ||
     modelPickerKind === "pi" ||
     modelPickerKind === "opencode";
   const modelOptions: readonly {
@@ -4763,7 +4770,9 @@ function useResolvedComposerModel(
     ? (reportedRowId ?? requestedRowId)
     : sessionModelOverride;
   const effectiveModel = nativeVendorOwnsModel
-    ? modelPickerKind === "cursor" || modelPickerKind === "kiro"
+    ? modelPickerKind === "cursor" ||
+      modelPickerKind === "kiro" ||
+      modelPickerKind === "antigravity"
       ? sessionModelOverride
       : modelPickerKind === "opencode" || modelPickerKind === "pi"
         ? (sessionModelOverride ?? llmModel)

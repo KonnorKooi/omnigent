@@ -125,7 +125,7 @@ import {
 } from "@/hooks/useConversations";
 import { conversationDisplayLabel } from "@/shell/sidebarNav";
 import { absoluteTime } from "@/lib/relativeTime";
-import { useNavigate } from "@/lib/routing";
+import { useNavigate, useParams } from "@/lib/routing";
 import { useSettingsRoute } from "@/shell/settingsNav";
 import { ImportSessionsPanel } from "@/shell/ImportSessionsPanel";
 import { isThemeMode, normalizeThemeMode, type ThemeMode } from "@/components/theme/themeMode";
@@ -246,6 +246,17 @@ const MembersPage = lazy(() =>
 const PoliciesPage = lazy(() =>
   import("@/pages/PoliciesPage").then((m) => ({ default: m.PoliciesPage })),
 );
+const McpServersSection = lazy(() =>
+  import("@/components/settings/McpServersSection").then((m) => ({
+    default: m.McpServersSection,
+  })),
+);
+const GovernancePage = lazy(() =>
+  import("@/pages/GovernancePage").then((m) => ({ default: m.GovernancePage })),
+);
+const GovernanceSessionPage = lazy(() =>
+  import("@/pages/GovernanceSessionPage").then((m) => ({ default: m.GovernanceSessionPage })),
+);
 const SharingPage = lazy(() =>
   import("@/pages/SharingPage").then((m) => ({ default: m.SharingPage })),
 );
@@ -263,6 +274,9 @@ export function SettingsPage() {
   // login_url; gates the Account section so SSO users get it too.
   const hasAuthSession = info !== "loading" && info.login_url !== null;
   const { section } = useSettingsRoute();
+  // Optional third path segment (`/settings/<section>/<detailId>`) addressing
+  // one record within a section. Only Governance uses it today.
+  const { detailId } = useParams<{ detailId: string }>();
   // Per-section page view: `settings.appearance`, `settings.account`, etc. The
   // hook re-keys on pathname, so switching sections re-fires under the new id.
   // `section` is a closed SettingsSectionId union (no PII / unbounded values).
@@ -275,13 +289,26 @@ export function SettingsPage() {
   // Rendered in ANY multi-user mode (accounts AND OIDC), not gated on
   // `accountsEnabled` — the nav + pages handle admin gating, and Members runs
   // read-only under OIDC (no password actions).
-  if (section === "members" || section === "policies" || section === "sharing") {
+  if (
+    section === "members" ||
+    section === "policies" ||
+    section === "sharing" ||
+    section === "governance"
+  ) {
     return (
       <Suspense fallback={null}>
         {section === "members" ? (
           <MembersPage />
         ) : section === "policies" ? (
           <PoliciesPage />
+        ) : section === "governance" ? (
+          // A detail id addresses one session: show its read-only transcript
+          // instead of the table.
+          detailId ? (
+            <GovernanceSessionPage sessionId={detailId} />
+          ) : (
+            <GovernancePage />
+          )
         ) : (
           <SharingPage />
         )}
@@ -297,6 +324,11 @@ export function SettingsPage() {
       {section === "integrations" && <IntegrationsSection />}
       {section === "shortcuts" && <ShortcutsSection />}
       {section === "import" && <ImportSection />}
+      {section === "mcp" && (
+        <Suspense fallback={null}>
+          <McpServersSection />
+        </Suspense>
+      )}
       {section === "account" && hasAuthSession && <AccountSection />}
       {section === "archived" && <ArchivedSection />}
       {section === "cli" && isElectronShell() && <LocalCliSection />}

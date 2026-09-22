@@ -120,6 +120,8 @@ class HostFrameKind(str, Enum):
     FS_WRITE_REQUEST = "host.fs_write_request"
     MODEL_OPTIONS = "host.model_options"
     MODEL_OPTIONS_RESULT = "host.model_options_result"
+    MCP_CONFIG = "host.mcp_config"
+    MCP_CONFIG_RESULT = "host.mcp_config_result"
     IMPORT_LOCAL = "host.import_local"
     IMPORT_LOCAL_BY_ID = "host.import_local_by_id"
     IMPORT_LOCAL_SESSION = "host.import_local_session"
@@ -951,6 +953,59 @@ class HostModelOptionsResultFrame:
 
 
 @dataclass
+class HostMcpConfigFrame:
+    """Server → host: read or change the harness CLIs' MCP server config.
+
+    An MCP server is only usable on the machine where the harness CLI runs,
+    so every Settings MCP operation is proxied to that host rather than
+    applied to the server's own config.
+
+    :param request_id: Correlates the result, e.g. ``"req_mcp_1"``.
+    :param op: ``"list"``, ``"add"``, ``"remove"``, or ``"probe"``.
+    :param harness: Harness CLI to act on, e.g. ``"claude"`` / ``"codex"``.
+        ``None`` on a ``list``, which reports every known harness.
+    :param name: MCP server name for ``add`` / ``remove`` / ``probe``;
+        ``None`` on a ``list``.
+    :param spec: Full server definition on an ``add`` — transport, command
+        or url, args, and any env/header VALUES. Secrets travel inbound in
+        this field only; nothing echoes them back.
+    """
+
+    request_id: str
+    op: str
+    harness: str | None = None
+    name: str | None = None
+    spec: _JsonObject | None = None
+
+
+@dataclass
+class HostMcpConfigResultFrame:
+    """Host → server: outcome of an MCP config operation on that machine.
+
+    Mirrors :class:`HostFsResultFrame`'s shape so the failure mapping is
+    the same: the host reports the HTTP status the operation deserves and
+    the server passes it through.
+
+    :param request_id: Correlates to the :class:`HostMcpConfigFrame`.
+    :param status: ``"ok"`` with ``payload`` set, or ``"error"``.
+    :param payload: Operation result on success — never containing an env
+        value, header value, or URL query string.
+    :param error_status: HTTP status for the failure (e.g. ``404``), or
+        ``None`` on success.
+    :param error_code: Machine-readable failure code (e.g. ``"not_found"``,
+        ``"harness_unavailable"``), or ``None`` on success.
+    :param error: Human-readable, non-secret failure detail, or ``None``.
+    """
+
+    request_id: str
+    status: str
+    payload: _JsonObject | None = None
+    error_status: int | None = None
+    error_code: str | None = None
+    error: str | None = None
+
+
+@dataclass
 class HostImportedLocalSession:
     """One local transcript the host read, normalized for import.
 
@@ -1073,6 +1128,8 @@ HostFrame = (
     | HostFsWriteFrame
     | HostModelOptionsFrame
     | HostModelOptionsResultFrame
+    | HostMcpConfigFrame
+    | HostMcpConfigResultFrame
     | HostImportLocalFrame
     | HostImportLocalByIdFrame
     | HostImportLocalSessionFrame
@@ -1432,6 +1489,29 @@ def encode_host_frame(frame: HostFrame) -> str:
                 "error": frame.error,
             }
         )
+    if isinstance(frame, HostMcpConfigFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.MCP_CONFIG.value,
+                "request_id": frame.request_id,
+                "op": frame.op,
+                "harness": frame.harness,
+                "name": frame.name,
+                "spec": frame.spec,
+            }
+        )
+    if isinstance(frame, HostMcpConfigResultFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.MCP_CONFIG_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "payload": frame.payload,
+                "error_status": frame.error_status,
+                "error_code": frame.error_code,
+                "error": frame.error,
+            }
+        )
     if isinstance(frame, HostModelOptionsFrame):
         return _encode_payload(
             {
@@ -1625,6 +1705,10 @@ def _decode_known_host_frame(
             return _decode_model_options(msg)
         case HostFrameKind.MODEL_OPTIONS_RESULT:
             return _decode_model_options_result(msg)
+        case HostFrameKind.MCP_CONFIG:
+            return _decode_mcp_config(msg)
+        case HostFrameKind.MCP_CONFIG_RESULT:
+            return _decode_mcp_config_result(msg)
         case HostFrameKind.IMPORT_LOCAL:
             return _decode_import_local(msg)
         case HostFrameKind.IMPORT_LOCAL_BY_ID:
@@ -2175,6 +2259,38 @@ def _decode_model_options_result(msg: _JsonObject) -> HostModelOptionsResultFram
         models=models,
         error=_optional_nullable_str(msg, "error"),
         routable_models=routable,
+    )
+
+
+def _decode_mcp_config(msg: _JsonObject) -> HostMcpConfigFrame:
+    """Decode a host.mcp_config request frame."""
+    spec = msg.get("spec")
+    if spec is not None and not isinstance(spec, dict):
+        raise ValueError("frame field must be a JSON object or null: 'spec'")
+    return HostMcpConfigFrame(
+        request_id=_required_str(msg, "request_id"),
+        op=_required_str(msg, "op"),
+        harness=_optional_nullable_str(msg, "harness"),
+        name=_optional_nullable_str(msg, "name"),
+        spec=spec,
+    )
+
+
+def _decode_mcp_config_result(msg: _JsonObject) -> HostMcpConfigResultFrame:
+    """Decode a host.mcp_config_result frame."""
+    payload = msg.get("payload")
+    if payload is not None and not isinstance(payload, dict):
+        raise ValueError("frame field must be a JSON object or null: 'payload'")
+    error_status = msg.get("error_status")
+    if error_status is not None and not isinstance(error_status, int):
+        raise ValueError("frame field must be an integer or null: 'error_status'")
+    return HostMcpConfigResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        payload=payload,
+        error_status=error_status,
+        error_code=_optional_nullable_str(msg, "error_code"),
+        error=_optional_nullable_str(msg, "error"),
     )
 
 

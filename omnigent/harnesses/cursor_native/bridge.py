@@ -44,6 +44,11 @@ _HOOKS_CONFIG_FILE = "hooks.json"
 _USAGE_HOOK_MODULE = "omnigent.harnesses.cursor_native.usage"
 _MCP_SERVER_NAME = "omnigent"
 _CURSOR_AUTO_APPROVE_TOOLS = [
+    "context_list",
+    "context_read",
+    "context_search",
+    "graph_neighbors",
+    "graph_query",
     "list_comments",
     "sys_add_policy",
     "sys_agent_download",

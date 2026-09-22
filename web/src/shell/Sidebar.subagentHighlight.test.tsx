@@ -146,14 +146,11 @@ function rowFor(id: string): HTMLElement {
 }
 
 describe("sidebar highlight while viewing a sub-agent", () => {
-  it("renders the official Omnigent wordmark instead of styled text", () => {
+  it("renders the Hopper wordmark when no custom app name is set", () => {
     mockConversations([]);
     renderAt("/");
 
-    const wordmark = screen.getByTestId("sidebar-wordmark");
-    expect(wordmark).toHaveAttribute("alt", "Omnigent");
-    expect(wordmark).toHaveClass("h-[15px]", "dark:invert");
-    expect(wordmark.getAttribute("src")).toContain("omnigent-wordmark");
+    expect(screen.getByTestId("sidebar-wordmark")).toHaveTextContent("Hopper");
   });
 
   it("sits flush to the window edge, no floating margin or border", () => {

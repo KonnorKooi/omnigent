@@ -75,6 +75,10 @@ from omnigent.tools.builtins.os_env import (
     SysOsShellTool,
     SysOsWriteTool,
 )
+from omnigent.tools.builtins.project_context import (
+    PROJECT_CONTEXT_TOOL_CLASSES,
+    PROJECT_CONTEXT_TOOL_NAMES,
+)
 from omnigent.tools.builtins.session_rename import SysSessionRenameTool
 from omnigent.tools.builtins.spawn import (
     # Shared contract values with the in-process sys_session_* tools. Imported
@@ -306,6 +310,11 @@ _SESSION_QUERY_TOOLS = frozenset(
 
 _SESSION_SELF_WRITE_TOOLS = frozenset({SysSessionRenameTool.name()})
 
+# Project context readers (designs/PROJECT_CONTEXT.md §4.3). Read-only proxies
+# of the session-scoped /v1/sessions/{id}/context routes; the server decides
+# whether the caller may see the session's project context at all.
+_PROJECT_CONTEXT_TOOLS = frozenset(PROJECT_CONTEXT_TOOL_NAMES)
+
 # The title bound the rename tool advertises to the LLM — read once from the
 # tool schema so the dispatcher can never drift from the published contract.
 _SESSION_RENAME_TITLE_MAX_CHARS: int = SysSessionRenameTool().get_schema()["function"][
@@ -458,6 +467,7 @@ _NATIVE_RELAY_BUILTIN_TOOLS = (
     _COMMENT_TOOLS
     | _SESSION_QUERY_TOOLS
     | _SESSION_SELF_WRITE_TOOLS
+    | _PROJECT_CONTEXT_TOOLS
     | _ASYNC_INBOX_TOOLS
     | _SUBAGENT_TOOLS
     | _LIST_MODELS_TOOLS
@@ -585,6 +595,7 @@ def build_native_relay_tool_schemas(spec: AgentSpec | None) -> list[_JsonObject]
             SysSessionGetHistoryTool,
             SysSessionGetInfoTool,
             SysSessionRenameTool,
+            *PROJECT_CONTEXT_TOOL_CLASSES,
             SysAgentGetTool,
             SysAgentListTool,
             SysAgentDownloadTool,
@@ -891,6 +902,7 @@ _ALL_LOCAL_TOOLS = (
     | _SESSION_CREATE_TOOLS
     | _SESSION_QUERY_TOOLS
     | _SESSION_SELF_WRITE_TOOLS
+    | _PROJECT_CONTEXT_TOOLS
     | _WEB_FETCH_TOOLS
     | _WEB_SEARCH_TOOLS
     | _NIMBLE_RESEARCH_TOOLS
@@ -5563,6 +5575,243 @@ async def _session_list_via_rest(
     )
 
 
+#: Tool output when the session is not in a project with context configured.
+_NO_PROJECT_CONTEXT_MESSAGE = (
+    "No project context is available for this session (it is not filed in a "
+    "project, or the project has no context repository configured)."
+)
+#: Largest context tool output returned to the model, in characters.
+_PROJECT_CONTEXT_OUTPUT_MAX_CHARS = 40_000
+
+
+def _server_error_message(response: httpx.Response) -> str:
+    """Extract a human-readable message from an Omnigent error response.
+
+    :param response: A non-2xx response.
+    :returns: The ``error.message`` (or ``detail``) text, else a status line.
+    """
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text[:200] or f"HTTP {response.status_code}"
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict) and isinstance(error.get("message"), str):
+            return error["message"]
+        detail = payload.get("detail")
+        if isinstance(detail, str):
+            return detail
+        if detail is not None:
+            return json.dumps(detail)[:200]
+    return f"HTTP {response.status_code}"
+
+
+def _format_context_list(payload: _JsonObject) -> str:
+    """Render the ``context_list`` response as an index.
+
+    :param payload: ``GET /sessions/{id}/context/list`` body.
+    :returns: One line per file plus a code-graph note.
+    """
+    files = payload.get("files")
+    lines = ["Project context files (read with context_read):"]
+    for entry in files if isinstance(files, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        desc = entry.get("description")
+        badge = " [always loaded]" if entry.get("always_loaded") else ""
+        lines.append(f"- {entry.get('path')}{badge}" + (f" — {desc}" if desc else ""))
+    if len(lines) == 1:
+        lines.append("(no files yet)")
+    lines.append(
+        "Code graph: available (use graph_query / graph_neighbors)."
+        if payload.get("has_code_graph")
+        else "Code graph: not built for this project."
+    )
+    return "\n".join(lines)
+
+
+def _format_context_read(payload: _JsonObject) -> str:
+    """Render a paged ``context_read`` response.
+
+    :param payload: ``GET /sessions/{id}/context/files`` body.
+    :returns: A header, the content, and a continuation notice when paged.
+    """
+    offset = int(payload.get("offset") or 0)
+    count = int(payload.get("lines") or 0)
+    total = int(payload.get("total_lines") or 0)
+    header = f"{payload.get('path')} (lines {offset + 1}-{offset + count} of {total})"
+    parts = [header, "", str(payload.get("content") or "")]
+    if payload.get("truncated"):
+        parts.append(
+            f"[... {total - offset - count} more lines; call context_read with "
+            f"offset={offset + count} to continue]"
+        )
+    return "\n".join(parts)
+
+
+def _format_context_search(payload: _JsonObject) -> str:
+    """Render ``context_search`` hits.
+
+    :param payload: ``GET /sessions/{id}/context/search`` body.
+    :returns: ``path:line: snippet`` lines.
+    """
+    results = payload.get("results")
+    rows = [r for r in results if isinstance(r, dict)] if isinstance(results, list) else []
+    if not rows:
+        return f"No project context matches for {payload.get('query')!r}."
+    lines = [f"{r.get('path')}:{r.get('line')}: {r.get('snippet')}" for r in rows]
+    if payload.get("truncated"):
+        lines.append("[... more matches; refine the query or raise limit]")
+    return "\n".join(lines)
+
+
+def _graph_node_line(entry: _JsonObject) -> str:
+    """Format one code-graph node as ``label (id) [file:loc]``.
+
+    :param entry: A node summary from the graph routes.
+    :returns: The formatted line fragment.
+    """
+    location = entry.get("source_file") or "?"
+    if entry.get("source_location"):
+        location = f"{location}:{entry.get('source_location')}"
+    return f"{entry.get('label')} ({entry.get('id')}) [{location}]"
+
+
+def _format_graph_neighbors(payload: _JsonObject) -> str:
+    """Render ``graph_neighbors`` output.
+
+    :param payload: ``GET /sessions/{id}/context/graph/neighbors`` body.
+    :returns: The resolved node and its neighbours, or candidate matches.
+    """
+    if not payload.get("available", True):
+        return "This project has no code graph yet (run Update context)."
+    node = payload.get("node")
+    if not isinstance(node, dict):
+        raw_candidates = payload.get("candidates")
+        candidates = (
+            [c for c in raw_candidates if isinstance(c, dict)]
+            if isinstance(raw_candidates, list)
+            else []
+        )
+        if not candidates:
+            return "No code-graph node matched. Try graph_query with a description."
+        return "Ambiguous node; candidates:\n" + "\n".join(
+            f"- {_graph_node_line(c)}" for c in candidates
+        )
+    lines = [_graph_node_line(node)]
+    neighbors = payload.get("neighbors")
+    for entry in neighbors if isinstance(neighbors, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        arrow = "-->" if entry.get("direction") == "out" else "<--"
+        indent = "  " * int(entry.get("depth") or 1)
+        lines.append(f"{indent}{arrow} {entry.get('relation')} {_graph_node_line(entry)}")
+    if len(lines) == 1:
+        lines.append("  (no neighbours)")
+    if payload.get("truncated"):
+        lines.append("[... neighbour list truncated]")
+    return "\n".join(lines)
+
+
+def _int_arg(args: _JsonObject, key: str, low: int, high: int) -> int | None:
+    """Read an optional integer tool argument, clamped to a range.
+
+    :param args: Parsed tool arguments.
+    :param key: Argument name.
+    :param low: Inclusive minimum.
+    :param high: Inclusive maximum.
+    :returns: The clamped value, or ``None`` when absent / not an integer.
+    """
+    value = args.get(key)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return max(low, min(value, high))
+    return None
+
+
+async def _execute_project_context_tool(
+    tool_name: str,
+    args: _JsonObject,
+    *,
+    conversation_id: str | None,
+    server_client: httpx.AsyncClient | None,
+) -> str:
+    """Run a project context tool through the session-scoped REST routes.
+
+    Every failure becomes a tool-result string so a missing project, an
+    offline server or a bad path never aborts the harness turn. A 404 that
+    says the session has no project context is reported as a plain notice,
+    not an error.
+
+    :param tool_name: One of :data:`PROJECT_CONTEXT_TOOL_NAMES`.
+    :param args: Parsed tool arguments.
+    :param conversation_id: The calling session.
+    :param server_client: Runner's Omnigent server client.
+    :returns: Human-readable tool output (truncated with a notice when long).
+    """
+    if server_client is None:
+        return json.dumps({"error": f"{tool_name} requires server access"})
+    if conversation_id is None:
+        return json.dumps({"error": f"{tool_name} requires a session id"})
+    base = f"/v1/sessions/{conversation_id}/context"
+    # (route suffix, required string arg name, query param name, optional ints)
+    routes: dict[str, tuple[str, str | None, str | None, tuple[tuple[str, int, int], ...]]] = {
+        "context_list": ("list", None, None, ()),
+        "context_read": ("files", "path", "path", (("offset", 0, 10**9), ("limit", 1, 2000))),
+        "context_search": ("search", "query", "q", (("limit", 1, 50),)),
+        "graph_query": ("graph/query", "question", "q", (("budget", 100, 8000),)),
+        "graph_neighbors": ("graph/neighbors", "node", "node", (("depth", 1, 2),)),
+    }
+    suffix, required, param, optional = routes[tool_name]
+    params: dict[str, str | int] = {}
+    if required is not None and param is not None:
+        value = args.get(required)
+        if not isinstance(value, str) or not value.strip():
+            return json.dumps({"error": f"{tool_name} requires a string '{required}'"})
+        params[param] = value
+    for key, low, high in optional:
+        clamped = _int_arg(args, key, low, high)
+        if clamped is not None:
+            params[key] = clamped
+    try:
+        response = await server_client.get(f"{base}/{suffix}", params=params, timeout=30.0)
+    except Exception as exc:  # noqa: BLE001
+        return json.dumps({"error": f"{tool_name} failed: {exc}"})
+    if response.status_code == 404:
+        message = _server_error_message(response)
+        if "no project context" in message.lower() or tool_name != "context_read":
+            return _NO_PROJECT_CONTEXT_MESSAGE
+        return f"context_read: {message}"
+    if response.status_code >= 400:
+        return json.dumps(
+            {
+                "error": f"{tool_name} returned {response.status_code}",
+                "detail": _server_error_message(response),
+            }
+        )
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        return json.dumps({"error": f"{tool_name} returned invalid JSON: {exc}"})
+    if not isinstance(payload, dict):
+        return json.dumps({"error": f"{tool_name} returned a non-object response"})
+    if tool_name == "context_list":
+        output = _format_context_list(payload)
+    elif tool_name == "context_read":
+        output = _format_context_read(payload)
+    elif tool_name == "context_search":
+        output = _format_context_search(payload)
+    elif tool_name == "graph_query":
+        output = str(payload.get("text") or "")
+    else:
+        output = _format_graph_neighbors(payload)
+    if len(output) > _PROJECT_CONTEXT_OUTPUT_MAX_CHARS:
+        output = (
+            output[:_PROJECT_CONTEXT_OUTPUT_MAX_CHARS]
+            + "\n[... output truncated; narrow the request (offset/limit, query, depth)]"
+        )
+    return output
+
+
 async def _rename_current_session_via_rest(
     args: _JsonObject,
     conversation_id: str | None,
@@ -6306,6 +6555,13 @@ async def execute_tool(
                 args,
                 conversation_id,
                 server_client,
+            )
+        elif tool_name in _PROJECT_CONTEXT_TOOLS:
+            output = await _execute_project_context_tool(
+                tool_name,
+                args,
+                conversation_id=conversation_id,
+                server_client=server_client,
             )
         elif tool_name in _SESSION_QUERY_TOOLS:
             output = await _execute_session_query_tool(

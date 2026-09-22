@@ -64,6 +64,13 @@ _ALWAYS_PRESENT_TOOLS: frozenset[str] = frozenset(
         "sys_session_list",
         "sys_session_get_info",
         "sys_session_rename",
+        # Project context readers are framework-owned and always present
+        # (they return a notice when the session has no project context).
+        "context_list",
+        "context_read",
+        "context_search",
+        "graph_query",
+        "graph_neighbors",
         # Read-only agent discovery tools are likewise always available
         # (global, permission-bounded reads of any accessible session's
         # agent / bundle).

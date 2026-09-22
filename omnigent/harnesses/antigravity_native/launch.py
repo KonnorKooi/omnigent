@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -87,6 +88,38 @@ def agy_binary_path() -> str:
     raise RuntimeError(
         f"agy CLI not found on PATH and not at {_AGY_FALLBACK_PATH}.\n{_AGY_INSTALL_HINT}"
     )
+
+
+def list_agy_cli_model_options(*, timeout_s: float = 30.0) -> list[dict[str, object]]:
+    """List the models the signed-in agy account can use, as picker options.
+
+    ``agy models`` prints one ``<id>\\t<display name>`` line per model the account
+    is entitled to; the id is what ``agy --model`` accepts.
+
+    :param timeout_s: Seconds to wait for ``agy models``.
+    :returns: ``[{"id", "displayName", "isDefault"}]`` rows in agy's order.
+    :raises subprocess.CalledProcessError: When agy fails (e.g. not signed in).
+    :raises ValueError: When the output lists no models.
+    """
+    completed = subprocess.run(
+        [agy_binary_path(), "models"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout_s,
+    )
+    options: list[dict[str, object]] = []
+    for line in completed.stdout.splitlines():
+        model_id, sep, name = line.partition("\t")
+        model_id = model_id.strip()
+        if not sep or not model_id:
+            continue
+        options.append(
+            {"id": model_id, "displayName": name.strip() or model_id, "isDefault": False}
+        )
+    if not options:
+        raise ValueError("agy models did not list any models")
+    return options
 
 
 @dataclass(frozen=True)

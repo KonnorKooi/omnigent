@@ -1173,6 +1173,32 @@ export async function fetchSessionItemsPage(
 }
 
 /**
+ * One page of a transcript read forward, oldest first.
+ *
+ * The mirror of {@link fetchSessionItemsPage}, which pages backward from the
+ * newest item for the live session view. A reader auditing a transcript
+ * starts at the beginning instead, so this scans ascending and needs no
+ * reversal.
+ *
+ * @param sessionId Session whose items to read.
+ * @param newerThan Cursor item id; returns items after it in ascending order.
+ */
+export async function fetchSessionItemsPageAsc(
+  sessionId: string,
+  { newerThan, limit = SESSION_HISTORY_PAGE_SIZE }: { newerThan?: string; limit?: number } = {},
+): Promise<SessionItemsPage> {
+  const params = new URLSearchParams({ limit: String(limit), order: "asc" });
+  if (newerThan) params.set("after", newerThan);
+  const res = await authenticatedFetch(
+    `/v1/sessions/${encodeURIComponent(sessionId)}/items?${params}`,
+  );
+  const page = await readJsonOrThrow<SessionItemsResponseWire>(res);
+  // Already chronological under order=asc — no reversal, unlike the
+  // descending pager.
+  return { items: page.data, hasMore: page.has_more };
+}
+
+/**
  * Items the initial window requests, in one round trip.
  *
  * Opening a session must not keep fetching afterwards: growing the window

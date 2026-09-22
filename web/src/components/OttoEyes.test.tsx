@@ -37,20 +37,20 @@ describe("OttoEyes", () => {
     // A real textarea to focus. Its caret point is derived from its
     // getBoundingClientRect (mocked below); jsdom has no layout, so the
     // mirror-div offsets resolve to 0 and the caret lands at the field's
-    // content origin — up and to the LEFT of both eye centers (x=10 <
-    // eyeX≈41/60), which is all the direction math needs.
+    // content origin — far enough LEFT of every eye (x=-300 < eyeX≥73) that
+    // the 8-way snapped gaze points left, which is all the math needs.
     const textarea = document.createElement("textarea");
     textarea.value = "hello";
     document.body.appendChild(textarea);
     vi.spyOn(textarea, "getBoundingClientRect").mockReturnValue({
-      left: 10,
-      top: 90,
-      right: 210,
-      bottom: 130,
+      left: -300,
+      top: 40,
+      right: -100,
+      bottom: 80,
       width: 200,
       height: 40,
-      x: 10,
-      y: 90,
+      x: -300,
+      y: 40,
       toJSON: () => ({}),
     } as DOMRect);
 
@@ -80,18 +80,19 @@ describe("OttoEyes", () => {
     }
 
     const farRightPointer = () =>
-      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 1000, clientY: 50.84 }));
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 1000, clientY: 23.96 }));
 
-    // A pointermove far to the right is the first genuine activity: both
-    // pupils ride the right rim (~+9.3) with ~zero vertical drift (the
-    // pointer sits on the eyes' shared row).
+    // A pointermove far to the right is the first genuine activity: every
+    // pupil steps one pixel right with no vertical step (the pointer sits on
+    // Otto's eye row, and the joey's eye is too close for it to tip into a
+    // diagonal).
     farRightPointer();
     await nextFrame();
     for (const pupil of pupils) {
       const t = transformOf(pupil);
       if (!t) throw new Error("pupil never received a transform");
-      expect(t.tx).toBeCloseTo(9.3, 1);
-      expect(Math.abs(t.ty)).toBeLessThan(0.1);
+      expect(t.tx).toBe(1);
+      expect(t.ty).toBe(0);
     }
 
     // Focusing the textarea alone must NOT switch the gaze to the caret: a
@@ -102,7 +103,7 @@ describe("OttoEyes", () => {
     for (const pupil of pupils) {
       const t = transformOf(pupil);
       if (!t) throw new Error("pupil never received a transform");
-      expect(t.tx).toBeCloseTo(9.3, 1);
+      expect(t.tx).toBe(1);
     }
 
     // A user-initiated caret move (an `input` event, e.g. a keystroke) pulls
@@ -123,7 +124,7 @@ describe("OttoEyes", () => {
     for (const pupil of pupils) {
       const t = transformOf(pupil);
       if (!t) throw new Error("pupil never received a transform");
-      expect(t.tx).toBeCloseTo(9.3, 1);
+      expect(t.tx).toBe(1);
     }
 
     textarea.remove();
@@ -155,19 +156,19 @@ describe("OttoEyes", () => {
 
     // Field focused, but the pointer (far right) is the last mover.
     textarea.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 1000, clientY: 50.84 }));
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 1000, clientY: 23.96 }));
     await nextFrame();
     for (const pupil of pupils) {
-      expect(transformOf(pupil)?.tx).toBeCloseTo(9.3, 1);
+      expect(transformOf(pupil)?.tx).toBe(1);
     }
 
     // input and click on an UNRELATED element must NOT switch the gaze to the
-    // caret — the pupils stay on the pointer (right rim).
+    // caret — the pupils stay on the pointer (stepped right).
     button.dispatchEvent(new Event("input", { bubbles: true }));
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await nextFrame();
     for (const pupil of pupils) {
-      expect(transformOf(pupil)?.tx).toBeCloseTo(9.3, 1);
+      expect(transformOf(pupil)?.tx).toBe(1);
     }
 
     textarea.remove();
@@ -183,14 +184,14 @@ describe("OttoEyes", () => {
     textarea.value = "hello";
     document.body.appendChild(textarea);
     vi.spyOn(textarea, "getBoundingClientRect").mockReturnValue({
-      left: 10,
-      top: 90,
-      right: 210,
-      bottom: 130,
+      left: -300,
+      top: 40,
+      right: -100,
+      bottom: 80,
       width: 200,
       height: 40,
-      x: 10,
-      y: 90,
+      x: -300,
+      y: 40,
       toJSON: () => ({}),
     } as DOMRect);
     // Focus BEFORE OttoEyes mounts — no focusin reaches the component.

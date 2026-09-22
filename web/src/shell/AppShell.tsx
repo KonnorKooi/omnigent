@@ -120,6 +120,7 @@ import { resolveDefaultShell } from "./preferredShell";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { SessionRail } from "./SessionRail";
 import type { RightRailTab } from "./railTabs";
+import { useSessionContextTrace } from "./SessionContextPanel";
 
 /**
  * Top-level layout. The sidebar and right panels are responsive:
@@ -788,6 +789,10 @@ export function AppShell() {
     enabled: canBrowseWorkspace,
   });
   const showFilesPanel = canBrowseWorkspace && environmentQuery.data?.available !== false;
+  // Project context tab: present only when the session's project has context
+  // (shares the WorkspacePanel query, so this adds no request).
+  const { data: sessionContextTrace } = useSessionContextTrace(serverConversationId);
+  const showContextTab = Boolean(sessionContextTrace);
   // Per-tab availability for the right workspace rail — the single source
   // of truth shared by the tab-fallback effect below, the rail's mount
   // gate, and the header's collapse toggle, so they can never disagree.
@@ -810,11 +815,12 @@ export function AppShell() {
         // Agents tab is unconditional: the panel always lists at least
         // the main agent (its "main" row), so there's never a dead end.
         subagents: true,
+        context: showContextTab,
         // Shells have no nav tab — they open as closable soft tabs in the
         // rail's tab strip (see WorkspacePanel's TerminalTabsStrip / "+"
         // menu). Mobile keeps a shells drawer (see ``showShellsTab`` below).
       }) as const,
-    [showFilesPanel],
+    [showFilesPanel, showContextTab],
   );
   // Whether the rail has anything at all to show. When false the workspace
   // card doesn't mount and the header hides its collapse toggle — a
@@ -2129,6 +2135,7 @@ export function AppShell() {
                     showFilesPanel={showFilesPanel}
                     showGithubTab={railTabsAvailable.github}
                     showBrowserTab={railTabsAvailable.browser}
+                    showContextTab={railTabsAvailable.context}
                     changedCount={changedCount}
                     subagentsWorking={subagentsWorking}
                     agentCount={agentCount}

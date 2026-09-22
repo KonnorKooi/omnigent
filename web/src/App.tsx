@@ -54,6 +54,10 @@ const CanvasPage = withPageView(
   "canvas",
   lazy(() => import("@/pages/CanvasPage").then((m) => ({ default: m.CanvasPage }))),
 );
+const ProjectContextPage = withPageView(
+  "project_context",
+  lazy(() => import("@/pages/ProjectContextPage").then((m) => ({ default: m.ProjectContextPage }))),
+);
 const TasksPage = withPageView(
   "tasks",
   lazy(() => import("@/pages/TasksPage").then((m) => ({ default: m.TasksPage }))),
@@ -178,6 +182,7 @@ function App({ basename }: AppProps = {}) {
             }
           />
           <Route path={`${prefix}/tasks`} element={<TasksPage />} />
+          <Route path={`${prefix}/projects/:projectId/context`} element={<ProjectContextPage />} />
           <Route
             path={`${prefix}/usage`}
             element={
@@ -196,6 +201,10 @@ function App({ basename }: AppProps = {}) {
             element={<Navigate to={`${prefix}/settings/general`} replace />}
           />
           <Route path={`${prefix}/settings/:section`} element={<SettingsPage />} />
+          {/* Third segment addresses one record within a section
+              (/settings/governance/<sessionId> opens that transcript).
+              Section resolution ignores it, so the same page handles both. */}
+          <Route path={`${prefix}/settings/:section/:detailId`} element={<SettingsPage />} />
           <Route path={`${prefix}/extensions/:extensionId/*`} element={<ExtensionPageRoute />} />
           {/* Members / Policies are now settings sub-categories
               (/settings/members, /settings/policies) so entering them

@@ -4354,12 +4354,16 @@ async def _auto_create_codex_terminal(
         from omnigent.inner.hook_scripts.subagent_router import smart_routing_spawn_note
 
         _codex_routing_note = smart_routing_spawn_note("codex-native")
+    # Project context rides the same additive channel; ``None`` (no project
+    # context) keeps the kwargs exactly as before.
+    _codex_project_context = await _fetch_project_context_injection(server_client, session_id)
     _codex_developer_instructions = (
         "\n\n".join(
             x
             for x in [
                 _native_startup_raw_instructions_from_spec(agent_spec),
                 _codex_routing_note,
+                _codex_project_context,
             ]
             if x
         )
@@ -5097,6 +5101,7 @@ async def _auto_create_antigravity_terminal(
         ensure_agy_feedback_survey_disabled,
         prepare_bridge_dir,
         seed_isolated_agy_home,
+        write_agy_global_rules,
         write_bridge_state,
         write_mcp_config,
         write_tmux_target,
@@ -5205,6 +5210,10 @@ async def _auto_create_antigravity_terminal(
             trusted_workspace=workspace,
         ),
     }
+    # Project context (designs/PROJECT_CONTEXT.md §4.4): agy has no system-prompt
+    # flag, so the text rides the isolated GEMINI.md it loads as global rules.
+    project_context_text = await _fetch_project_context_injection(server_client, session_id)
+    await asyncio.to_thread(write_agy_global_rules, bridge_dir, project_context_text)
     # agy's periodic feedback survey shares its "esc to cancel" footer with the
     # running-turn marker, so a web turn injected while it is up is misread as an
     # active turn and lost (#1494). Disable it before launch. agy now runs under
@@ -6416,6 +6425,76 @@ def _ensure_orchestrator_skills_in_bundle(
         )
 
 
+#: Upper bound on the startup fetch of a session's project context. Launch must
+#: never stall on it: a slow or absent server just means no injected context.
+_PROJECT_CONTEXT_FETCH_TIMEOUT_S = 10.0
+
+
+async def _fetch_project_context_injection(
+    server_client: httpx.AsyncClient | None,
+    session_id: str,
+    harness: str | None = None,
+) -> str | None:
+    """
+    Fetch the project context text to append to a native harness's startup instructions.
+
+    The server builds the text (``designs/PROJECT_CONTEXT.md`` §4.4) and
+    decides whether this session may see it: a session outside a project, a
+    project without context, or a caller who does not own the project all come
+    back as 404, which is the common case and not an error. Any failure is
+    swallowed so terminal launch is never blocked on context.
+
+    :param server_client: Runner's Omnigent server client, or ``None``.
+    :param session_id: The session being launched, e.g. ``"conv_abc123"``.
+    :param harness: Harness being launched, e.g. ``"claude-native"``, so the
+        server can leave out profile files that harness already loads itself.
+    :returns: The injected text, or ``None`` when there is none.
+    """
+    if server_client is None:
+        return None
+    try:
+        response = await server_client.get(
+            f"/v1/sessions/{session_id}/context/injected",
+            params={"harness": harness} if harness else None,
+            timeout=_PROJECT_CONTEXT_FETCH_TIMEOUT_S,
+        )
+    except Exception:  # noqa: BLE001 — best-effort; launch proceeds without context
+        _logger.debug(
+            "project context fetch failed for session %s",
+            session_id,
+            exc_info=True,
+            extra={"session_id": session_id},
+        )
+        return None
+    if response.status_code != 200:
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    text = payload.get("text") if isinstance(payload, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        return None
+    _logger.info(
+        "Injecting project context into session %s (%d chars)",
+        session_id,
+        len(text),
+        extra={"session_id": session_id},
+    )
+    return text
+
+
+def _project_context_allowed_claude_tools() -> tuple[str, ...]:
+    """
+    Claude ``--allowedTools`` entries pre-approving the read-only context tools.
+
+    :returns: ``mcp__omnigent__<name>`` for each project context tool.
+    """
+    from omnigent.tools.builtins.project_context import PROJECT_CONTEXT_TOOL_NAMES
+
+    return tuple(f"mcp__omnigent__{name}" for name in PROJECT_CONTEXT_TOOL_NAMES)
+
+
 #: Omnigent MCP tools an auto-harness Claude session must be able to call
 #: without an interactive prompt: the two the cross-harness redirect names, the
 #: one that delivers the sub-task, and the one that collects its result. The
@@ -7329,6 +7408,13 @@ async def _auto_create_claude_terminal(
         launch_metadata.auto_harness,
         router_started=subagent_router_dir is not None,
     )
+    # Project context (designs/PROJECT_CONTEXT.md §4.4): appended after the
+    # author instructions, and its read-only tools pre-approved, only when the
+    # session's project actually has context — otherwise the argv is unchanged.
+    project_context_text = await _fetch_project_context_injection(
+        server_client, session_id, harness="claude-native"
+    )
+    project_context_tools = _project_context_allowed_claude_tools() if project_context_text else ()
     claude_args = augment_claude_args(
         base_claude_args,
         bridge_dir=bridge_dir,
@@ -7342,11 +7428,15 @@ async def _auto_create_claude_terminal(
         subagent_router_dir=subagent_router_dir,
         append_system_prompt="\n\n".join(
             x
-            for x in [_native_startup_raw_instructions_from_spec(agent_spec), routed_spawn_note]
+            for x in [
+                _native_startup_raw_instructions_from_spec(agent_spec),
+                routed_spawn_note,
+                project_context_text,
+            ]
             if x
         )
         or None,
-        allowed_tools=routed_spawn_tools,
+        allowed_tools=routed_spawn_tools + project_context_tools,
         # The route-turn hook is registered only when this session can
         # actually route; otherwise every submit would pay its round trip.
         turn_routing=_claude_turn_router is not None,

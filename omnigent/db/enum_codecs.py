@@ -5,7 +5,8 @@ Several low-cardinality closed-set columns (``conversations.kind``,
 ``account_tokens.kind``, ``policies.type``, ``policies.scope``,
 ``hosts.status``, ``agents.kind``, ``scheduled_tasks.state``,
 ``scheduled_tasks.execution_target``,
-``scheduled_task_runs.status``) are stored as
+``scheduled_task_runs.status``,
+``governance_access_log.action``) are stored as
 integer codes rather
 than their string names — smaller rows and a tighter ``CHECK`` than a
 free ``VARCHAR``. The string names remain the
@@ -125,6 +126,11 @@ SCHEDULED_TASK_RUN_STATUS: dict[str, int] = {
     "succeeded": 3,
     "failed": 4,
     "skipped": 5,
+}
+
+GOVERNANCE_ACCESS_ACTION: dict[str, int] = {
+    "list": 1,
+    "read": 2,
 }
 
 
@@ -248,6 +254,16 @@ def encode_session_live_status(name: str) -> int:
 def decode_session_live_status(code: int) -> str:
     """Decode an ``omnigent_conversation_metadata.live_status`` int code to its name."""
     return _decode(SESSION_LIVE_STATUS, code, field="omnigent_conversation_metadata.live_status")
+
+
+def encode_governance_access_action(name: str) -> int:
+    """Encode a ``governance_access_log.action`` name to its int code."""
+    return _encode(GOVERNANCE_ACCESS_ACTION, name, field="governance_access_log.action")
+
+
+def decode_governance_access_action(code: int) -> str:
+    """Decode a ``governance_access_log.action`` int code to its name."""
+    return _decode(GOVERNANCE_ACCESS_ACTION, code, field="governance_access_log.action")
 
 
 def encode_account_token_kind(name: str) -> int:

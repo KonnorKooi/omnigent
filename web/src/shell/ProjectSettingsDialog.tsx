@@ -49,6 +49,7 @@ import {
 } from "@/lib/nativeCodingAgents";
 import type { ProjectConfig } from "@/lib/projectsApi";
 import { shouldGuardDialogDismiss } from "@/lib/dialogDismissGuard";
+import { Link } from "@/lib/routing";
 import { AgentHarnessPicker } from "./NewChatDialog";
 import { isNavigablePath, WorkspacePicker } from "./WorkspacePicker";
 
@@ -267,7 +268,8 @@ export function ProjectSettingsDialog({
   const selectedNativeSpec = nativeCodingAgentForAvailableAgent(selectedAgent);
   const harnessTakesModel =
     nativeAgentHasCapability(selectedAgent, "modelPicker") ||
-    selectedNativeSpec?.harness === "codex-native";
+    selectedNativeSpec?.harness === "codex-native" ||
+    selectedNativeSpec?.harness === "antigravity-native";
   // Live host-resolved model options. The project's default host when set,
   // else the first online host (the composer's auto-pick) — without the
   // fallback a Codex project (no static catalog) could never populate the
@@ -319,6 +321,19 @@ export function ProjectSettingsDialog({
           <DialogDescription>
             Defaults for new sessions in <span className="font-medium">{projectName}</span>. Each is
             a starting point you can change per session; leave a field blank for no default.
+            {projectId && (
+              <>
+                {" "}
+                <Link
+                  to={`/projects/${encodeURIComponent(projectId)}/context`}
+                  className="text-primary underline-offset-2 hover:underline"
+                  data-testid="project-settings-context-link"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Project context →
+                </Link>
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">

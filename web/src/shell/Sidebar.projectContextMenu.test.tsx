@@ -250,6 +250,16 @@ describe("project folder header context menu", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("Project settings");
   });
 
+  it("links a first-class project to its Context page", () => {
+    renderSidebar();
+
+    fireEvent.contextMenu(folderHeader());
+    expect(screen.getByTestId("project-context-menu")).toHaveAttribute(
+      "href",
+      `/projects/${PROJECT_ID}/context`,
+    );
+  });
+
   it("drives Delete into the shared confirmation and mutation", () => {
     renderSidebar();
 

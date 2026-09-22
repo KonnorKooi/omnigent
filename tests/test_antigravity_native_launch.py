@@ -6,6 +6,7 @@ gemini_auth_has_credential, agy_binary_path) are monkeypatched.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -369,3 +370,46 @@ class TestShouldSkipPermissions:
     def test_none_mode_headless_true(self) -> None:
         """``None`` mode + headless skips (headless wins regardless of mode)."""
         assert should_skip_permissions(permission_mode=None, headless=True) is True
+
+
+def test_list_agy_cli_model_options_parses_agy_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each ``<id>\\t<name>`` line of ``agy models`` becomes one picker row."""
+    stdout = (
+        "gemini-3.8-flash-high\tGemini 3.8 Flash (High)\n"
+        "not a model row\n"
+        "claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)\n"
+    )
+    monkeypatch.setattr(_mod, "agy_binary_path", lambda: "/bin/agy")
+    monkeypatch.setattr(
+        _mod.subprocess,
+        "run",
+        lambda argv, **_: subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr=""),
+    )
+
+    assert _mod.list_agy_cli_model_options() == [
+        {
+            "id": "gemini-3.8-flash-high",
+            "displayName": "Gemini 3.8 Flash (High)",
+            "isDefault": False,
+        },
+        {
+            "id": "claude-sonnet-4-6",
+            "displayName": "Claude Sonnet 4.6 (Thinking)",
+            "isDefault": False,
+        },
+    ]
+
+
+def test_list_agy_cli_model_options_rejects_empty_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No model rows (e.g. a sign-in prompt on stdout) is a failed lookup, not an empty picker."""
+    monkeypatch.setattr(_mod, "agy_binary_path", lambda: "/bin/agy")
+    monkeypatch.setattr(
+        _mod.subprocess,
+        "run",
+        lambda argv, **_: subprocess.CompletedProcess(
+            argv, 0, stdout="Please sign in\n", stderr=""
+        ),
+    )
+
+    with pytest.raises(ValueError):
+        _mod.list_agy_cli_model_options()

@@ -1676,3 +1676,77 @@ class SqlScheduledTaskRun(OmnigentBase):
             "conversation_id",
         ),
     )
+
+
+class SqlGovernanceAccessLog(OmnigentBase):
+    """
+    SQLAlchemy model for the ``governance_access_log`` table.
+
+    One row per admin access to the governance surface. The governance
+    endpoints list and open *every* user's sessions, bypassing the
+    per-session ACLs that scope the normal sidebar, so each use of that
+    power is itself recorded here.
+
+    Append-only: the application never updates or deletes a row, and the
+    store exposes no path to. A record of who read whose session must not
+    be editable by the same admins it exists to hold accountable.
+
+    :param id: UUID primary key stored as 16 raw bytes (see :class:`Uuid16`),
+        surfaced as a bare 32-char hex string (no dashes).
+    :param user_id: The acting admin, e.g. ``"alice@example.com"``. ``None``
+        in single-user mode, where no identity is authenticated.
+    :param action: ``list`` or ``read``. Stored as a stable int code (see
+        omnigent.db.enum_codecs GOVERNANCE_ACCESS_ACTION); the store
+        converts to/from the string name at the row↔entity boundary.
+    :param target_conversation_id: The transcript opened by a ``read``
+        (relates to ``conversations.id``; no DB foreign key, Rule R032 — the
+        log outlives the session it refers to, deliberately). ``None`` for a
+        ``list``.
+    :param filters_json: Serialized query filters for a ``list``, recording
+        which slice of sessions was examined. ``None`` for a ``read``. Safe
+        filter metadata only — never message bodies, credentials, or tokens.
+    :param created_at_us: Unix epoch **microseconds** the access happened.
+        Microseconds, not the seconds most timestamps in this schema carry:
+        the extra precision keeps a burst of accesses inside one second
+        ordered. Readers must divide by 1_000_000 before rendering.
+    """
+
+    __tablename__ = "governance_access_log"
+
+    # Tenant partition key: Databricks workspace id owning this row (0 = default). Part of the PK.
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        nullable=False,
+        server_default="0",
+        default=current_workspace_id,
+    )
+    id: Mapped[str] = mapped_column(Uuid16, primary_key=True)
+    # NULL in single-user mode, where no identity is authenticated.
+    user_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Enum stored as a stable int code (see omnigent.db.enum_codecs
+    # GOVERNANCE_ACCESS_ACTION: list=1, read=2).
+    action: Mapped[int] = mapped_column(SmallInteger)
+    # Relates to conversations.id. No DB foreign key (Rule R032): the audit
+    # row must survive deletion of the session it records an access to.
+    target_conversation_id: Mapped[str | None] = mapped_column(Uuid16, nullable=True)
+    # Opaque JSON blob of safe filter metadata, never SQL-queried — stored
+    # compressed.
+    filters_json: Mapped[str | None] = mapped_column(CompressedText, nullable=True)
+    # Epoch MICROseconds (not seconds) — exceeds Integer range, hence BigInteger.
+    created_at_us: Mapped[int] = mapped_column(BigInteger)
+
+    __table_args__ = (
+        CheckConstraint(
+            "action IN (1, 2)",
+            name="ck_governance_access_log_action",
+        ),
+        # The only read path: newest-first paging of the log. id is the
+        # tiebreaker for the rare same-microsecond write.
+        Index(
+            "ix_governance_access_log_created_at_us",
+            "workspace_id",
+            "created_at_us",
+            "id",
+        ),
+    )

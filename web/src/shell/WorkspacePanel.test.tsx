@@ -26,6 +26,9 @@ vi.mock("./FilesPanel", () => ({
     <div data-testid="files-panel-stub" data-flat-view={String(flatView)} />
   ),
 }));
+vi.mock("./SessionContextPanel", () => ({
+  SessionContextPanel: () => <div data-testid="session-context-stub" />,
+}));
 vi.mock("./SubagentsPanel", () => ({
   SubagentsPanel: () => <div data-testid="subagents-stub" />,
 }));
@@ -86,6 +89,7 @@ function renderWorkspace(
     changedCount?: number;
     showGithubTab?: boolean;
     showBrowserTab?: boolean;
+    showContextTab?: boolean;
     openTerminals?: string[];
     selectedTerminalKey?: string | null;
     maximized?: boolean;
@@ -116,6 +120,7 @@ function renderWorkspace(
         showFilesPanel
         showGithubTab={overrides.showGithubTab ?? false}
         showBrowserTab={overrides.showBrowserTab ?? false}
+        showContextTab={overrides.showContextTab ?? false}
         changedCount={overrides.changedCount ?? 0}
         subagentsWorking={0}
         agentCount={1}
@@ -330,6 +335,19 @@ describe("WorkspacePanel content area", () => {
     // The Changes tab pins the same panel to the changed-files-only flat list.
     expect(screen.getByTestId("files-panel-stub")).toHaveAttribute("data-flat-view", "true");
     expect(screen.queryByTestId("file-viewer-stub")).toBeNull();
+  });
+});
+
+describe("WorkspacePanel project context tab", () => {
+  it("is hidden unless the session's project has context", () => {
+    renderWorkspace({});
+    expect(screen.queryByRole("tab", { name: "Project context" })).toBeNull();
+  });
+
+  it("shows the tab and renders the context panel when selected", () => {
+    renderWorkspace({ showContextTab: true, rightRailTab: "context", selectedFilePath: null });
+    expect(screen.getByRole("tab", { name: "Project context" })).toBeInTheDocument();
+    expect(screen.getByTestId("session-context-stub")).toBeInTheDocument();
   });
 });
 

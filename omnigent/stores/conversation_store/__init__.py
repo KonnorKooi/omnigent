@@ -684,6 +684,11 @@ class ConversationStore(ABC):
         pinned: bool = False,
         pinned_owner: str | None = None,
         title: str | None = None,
+        label_filters: dict[str, str] | None = None,
+        workspace_prefix: str | None = None,
+        updated_after: int | None = None,
+        updated_before: int | None = None,
+        owned_by_any: list[str] | None = None,
     ) -> PagedList[Conversation]:
         """
         List conversations with cursor-based pagination.
@@ -769,6 +774,23 @@ class ConversationStore(ABC):
             with them. Powers the per-project folder fetch, since
             projects only ever hold the owner's own sessions.
             ``None`` disables the filter.
+        :param label_filters: Exact ``key -> value`` label matches,
+            ANDed together — a row must carry every pair. Powers the
+            governance surface's provenance filter. ``None`` or empty
+            disables the filter.
+        :param workspace_prefix: Restrict to sessions whose
+            ``workspace`` starts with this path, e.g.
+            ``"/home/alice/code"``. ``None`` or empty disables it.
+        :param updated_after: Inclusive lower bound on ``updated_at``,
+            epoch seconds. ``None`` disables it; ``0`` is a real epoch
+            and is honoured as a bound, so a cleared date filter must
+            send ``None`` rather than ``0``.
+        :param updated_before: Inclusive upper bound on ``updated_at``,
+            epoch seconds. ``None`` disables it.
+        :param owned_by_any: Restrict to sessions owned by ANY of these
+            users — the multi-owner form of ``owned_by``, for the
+            governance owner filter. Intersected with the other
+            permission filters. ``None`` or empty disables it.
         :param include_archived: When ``False`` (default), archived
             conversations are excluded. When ``True``, archived and
             non-archived conversations are both returned (the caller
@@ -1252,6 +1274,41 @@ class ConversationStore(ABC):
             ``"2026-06-05"``.
         :param ask_approved_usd: The crossed checkpoint value (USD) the
             user approved continuing past, e.g. ``0.05``.
+        """
+        ...
+
+    @abstractmethod
+    def resolve_owners(self, conversation_ids: list[str]) -> dict[str, str | None]:
+        """
+        Return the owning user for each of several sessions, in one query.
+
+        The bulk form of :meth:`get_session_owner`, for surfaces that
+        render a whole page of sessions at once (the governance table).
+        A per-row lookup there would be N+1 across the page.
+
+        Same ownership rule as :meth:`get_session_owner`: the
+        highest-``level`` grantee, excluding the ``"__public__"``
+        sentinel.
+
+        :param conversation_ids: The sessions to resolve, e.g.
+            ``["conv_abc123", "conv_def456"]``.
+        :returns: ``conversation_id -> owner user id``. A session with
+            no real (non-public) grant maps to ``None``; a session id
+            that does not exist is simply absent from the mapping.
+        """
+        ...
+
+    @abstractmethod
+    def count_items(self, conversation_id: str) -> int:
+        """
+        Return how many items a conversation holds.
+
+        Counted in SQL rather than by materializing the items, so a long
+        transcript costs an index scan, not a page of row construction.
+
+        :param conversation_id: The session to count, e.g.
+            ``"conv_abc123"``.
+        :returns: The item count; ``0`` for an unknown or empty session.
         """
         ...
 

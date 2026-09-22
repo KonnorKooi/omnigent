@@ -2796,6 +2796,57 @@ describe("NewChatLandingScreen", () => {
     ]);
   }
 
+  it("offers only the account's agy models for Antigravity and launches with the pick", async () => {
+    mockAgents([
+      {
+        id: "a_agy",
+        name: "antigravity-native-ui",
+        display_name: "Antigravity",
+        description: null,
+        harness: "antigravity-native",
+        skills: [],
+      },
+    ]);
+    useHostModelOptionsMock.mockImplementation(
+      (_hostId, harness) =>
+        (harness === "antigravity-native"
+          ? {
+              data: [
+                { id: "gemini-3.1-pro-low", displayName: "Gemini 3.1 Pro (Low)" },
+                { id: "gemini-3.8-flash-high", displayName: "Gemini 3.8 Flash (High)" },
+              ],
+              isLoading: false,
+              error: null,
+            }
+          : CLAUDE_MODEL_OPTIONS_RESULT) as unknown as ReturnType<typeof useHostModelOptions>,
+    );
+    renderLanding();
+    openAgentModels("a_agy");
+
+    const models = screen.getByTestId("new-chat-landing-agent-models");
+    expect(models).toHaveTextContent("Gemini 3.1 Pro (Low)");
+    expect(models).toHaveTextContent("Gemini 3.8 Flash (High)");
+    expect(screen.queryByTestId("new-chat-landing-agent-efforts")).toBeNull();
+    fireEvent.click(screen.getByTestId("new-chat-landing-agent-model-gemini-3.1-pro-low"));
+    closeMenu();
+    const { body } = await submitAndReadBody();
+    expect(body.model_override).toBe("gemini-3.1-pro-low");
+  });
+
+  it("lists a harness the host reports ready without opening Other", () => {
+    mockClaudeAndPi();
+    mockHosts([
+      {
+        ...host("online"),
+        configured_harnesses: { "claude-native": true, "pi-native": true },
+      } as Host,
+    ]);
+    renderLanding();
+    fireEvent.pointerDown(screen.getByTestId("new-chat-landing-agent-select"), { button: 0 });
+    expect(screen.getByTestId("new-chat-landing-agent-a_pi")).toBeTruthy();
+    expect(screen.queryByTestId("new-chat-landing-harness-more")).toBeNull();
+  });
+
   it("keeps a previously-launched secondary harness in Other", () => {
     localStorage.setItem("omnigent:recent-harnesses", JSON.stringify(["pi-native"]));
     mockClaudeAndPi();

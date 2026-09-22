@@ -50,6 +50,12 @@ export interface ProjectConfig {
    * the harness's own configured default.
    */
   model?: string;
+  /**
+   * Project context repository (designs/PROJECT_CONTEXT.md). Unlike the other
+   * keys the server does read this one: it validates the paths on save and
+   * serves the folder through `/v1/projects/{id}/context`.
+   */
+  context?: { path: string; profile_path?: string | null; repo_path?: string | null };
 }
 
 /** A first-class project. Mirrors the `ProjectObject` response shape. */

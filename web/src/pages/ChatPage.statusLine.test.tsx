@@ -76,7 +76,12 @@ vi.mock("@/lib/agentLabels", async (importOriginal) => ({
 }));
 
 import { BRAIN_HARNESS_LABELS } from "@/lib/agentLabels";
-import { Composer, composerHarnessLabel, formatModelEffortStatusLabel } from "./ChatPage";
+import {
+  Composer,
+  composerHarnessLabel,
+  formatModelEffortStatusLabel,
+  modelPickerKindForConv,
+} from "./ChatPage";
 
 // Pins the visibility rules for the status-line tray under the composer:
 // it shows the worktree branch (truncated so the tray never wraps), current
@@ -420,10 +425,19 @@ describe("Composer status line (branch + context ring)", () => {
   });
 });
 
+describe("modelPickerKindForConv", () => {
+  it("gives Antigravity sessions the runner-backed model picker", () => {
+    expect(
+      modelPickerKindForConv({ labels: { "omnigent.wrapper": "antigravity-native-ui" } }),
+    ).toBe("antigravity");
+  });
+});
+
 describe("composerHarnessLabel", () => {
   it("reads native wrappers as the bare vendor name", () => {
     expect(composerHarnessLabel("claude", null, "claude-native")).toBe("Claude");
     expect(composerHarnessLabel("codex", null, "codex-native")).toBe("Codex");
+    expect(composerHarnessLabel("antigravity", null, "antigravity-native")).toBe("Antigravity");
   });
 
   it("reads SDK agents as '<Agent> (<Harness>)'", () => {

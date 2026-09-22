@@ -1760,6 +1760,53 @@ class SqlAlchemyConversationStore(ConversationStore):
             write,
         )
 
+    def resolve_owners(self, conversation_ids: list[str]) -> dict[str, str | None]:
+        """
+        Return the owning user for each of several sessions. See base class.
+
+        One query for the whole page: rows come back ordered by
+        (conversation, level) and the first row seen per conversation is
+        its highest-level grantee, so the owner falls out without a
+        per-conversation query or the owner-level integer hardcoded.
+        """
+        from omnigent.server.auth import RESERVED_USER_PUBLIC
+
+        ids = [cid for cid in dict.fromkeys(conversation_ids) if cid]
+        if not ids:
+            return {}
+        owners: dict[str, str | None] = {}
+        with self._session("select_session_owners") as session:
+            rows = session.execute(
+                select(
+                    SqlSessionPermission.conversation_id,
+                    SqlSessionPermission.user_id,
+                )
+                .where(SqlSessionPermission.workspace_id == current_workspace_id())
+                .where(SqlSessionPermission.conversation_id.in_(ids))
+                .where(SqlSessionPermission.user_id != RESERVED_USER_PUBLIC)
+                .order_by(
+                    SqlSessionPermission.conversation_id,
+                    SqlSessionPermission.level.desc(),
+                )
+            ).all()
+            for conversation_id, user_id in rows:
+                # First row per conversation is the highest-level grantee.
+                owners.setdefault(conversation_id, user_id)
+        return owners
+
+    def count_items(self, conversation_id: str) -> int:
+        """Return how many items a conversation holds. See base class."""
+        with self._conv_session("count_conversation_items") as session:
+            return (
+                session.execute(
+                    select(func.count())
+                    .select_from(SqlConversationItem)
+                    .where(SqlConversationItem.workspace_id == current_workspace_id())
+                    .where(SqlConversationItem.conversation_id == conversation_id)
+                ).scalar()
+                or 0
+            )
+
     def get_session_owner(self, conversation_id: str) -> str | None:
         """
         Return the user id that owns a session (its creator).
@@ -2450,10 +2497,32 @@ class SqlAlchemyConversationStore(ConversationStore):
         pinned: bool = False,
         pinned_owner: str | None = None,
         title: str | None = None,
+        label_filters: dict[str, str] | None = None,
+        workspace_prefix: str | None = None,
+        updated_after: int | None = None,
+        updated_before: int | None = None,
+        owned_by_any: list[str] | None = None,
     ) -> PagedList[Conversation]:
         """
         List conversations with cursor-based pagination.
 
+        :param label_filters: Exact ``key -> value`` label matches, ANDed
+            together. Powers the governance surface's provenance filter.
+            ``None`` or empty disables the filter.
+        :param workspace_prefix: Restrict to sessions whose ``workspace``
+            starts with this path, e.g. ``"/home/alice/code"``. Matched on
+            the metadata DB, where ``workspace`` lives. ``None`` or empty
+            disables the filter.
+        :param updated_after: Lower bound (inclusive) on ``updated_at``,
+            epoch seconds. ``None`` disables it — ``0`` is a real epoch and
+            is honoured as a bound, so a cleared date box must send
+            ``None``, not ``0``.
+        :param updated_before: Upper bound (inclusive) on ``updated_at``,
+            epoch seconds. ``None`` disables it.
+        :param owned_by_any: Restrict to sessions owned by ANY of these
+            users — the multi-owner form of ``owned_by``, for the
+            governance owner filter. Intersected with the other permission
+            filters like ``owned_by`` is. ``None`` or empty disables it.
         :param limit: Maximum number of conversations to return.
         :param after: Cursor conversation ID; return
             conversations appearing after this one in sort
@@ -2542,7 +2611,15 @@ class SqlAlchemyConversationStore(ConversationStore):
         # still require an Omnigent-side prefetch are the permission scopes.
         # shared_only also needs both accessible and owned sets so it can
         # compute the difference (accessible − owned).
-        needs_meta_filter = (accessible_by is not None) or (owned_by is not None) or shared_only
+        owners_any = [u for u in (owned_by_any or []) if u]
+        workspace_prefix = workspace_prefix or None
+        needs_meta_filter = (
+            (accessible_by is not None)
+            or (owned_by is not None)
+            or shared_only
+            or bool(owners_any)
+            or workspace_prefix is not None
+        )
 
         qualifying_ids: list[str] | None = None
         if needs_meta_filter:
@@ -2579,15 +2656,55 @@ class SqlAlchemyConversationStore(ConversationStore):
                             )
                         ).scalars()
                     )
+                owners_any_set: set[str] | None = None
+                if owners_any:
+                    # Multi-owner form: a session qualifies if ANY named user
+                    # owns it (a union), unlike owned_by's single-user set.
+                    owners_any_set = set(
+                        meta_sess.execute(
+                            select(SqlSessionPermission.conversation_id).where(
+                                SqlSessionPermission.workspace_id == current_workspace_id(),
+                                SqlSessionPermission.user_id.in_(owners_any),
+                                SqlSessionPermission.level >= LEVEL_OWNER,
+                            )
+                        ).scalars()
+                    )
+                workspace_set: set[str] | None = None
+                if workspace_prefix is not None:
+                    # `workspace` lives on the metadata DB, so a prefix match
+                    # resolves here and joins the other id sets below rather
+                    # than becoming a WHERE on the conversation query.
+                    escaped = (
+                        workspace_prefix.replace("\\", "\\\\")
+                        .replace("%", "\\%")
+                        .replace("_", "\\_")
+                    )
+                    workspace_set = set(
+                        meta_sess.execute(
+                            select(SqlConversationMetadata.id).where(
+                                SqlConversationMetadata.workspace_id == current_workspace_id(),
+                                SqlConversationMetadata.workspace.like(f"{escaped}%", escape="\\"),
+                            )
+                        ).scalars()
+                    )
                 if shared_only:
                     # shared_only = accessible but NOT owned
                     qualifying_ids = list((accessible_set or set()) - (owned_set or set()))
                 elif accessible_set is not None and owned_set is not None:
                     qualifying_ids = list(accessible_set & owned_set)
-                else:
+                elif accessible_set is not None or owned_set is not None:
                     qualifying_ids = list(
                         accessible_set if accessible_set is not None else owned_set or set()
                     )
+                # The governance filters intersect with whatever the ACL
+                # filters already narrowed to; each is ANDed, never widening.
+                for extra in (owners_any_set, workspace_set):
+                    if extra is None:
+                        continue
+                    if qualifying_ids is None:
+                        qualifying_ids = list(extra)
+                    else:
+                        qualifying_ids = list(set(qualifying_ids) & extra)
 
         with self._conv_session("list_conversations") as session:
             # Bound the content-search scan server-side (Postgres only). SET
@@ -2657,6 +2774,23 @@ class SqlAlchemyConversationStore(ConversationStore):
                 stmt = stmt.where(SqlConversation.agent_id == agent_id)
             if title is not None:
                 stmt = stmt.where(SqlConversation.title == title)
+            if label_filters:
+                # Labels are colocated on the AP DB, so each key/value pair is
+                # an inline subquery. Pairs AND together: a row must carry
+                # every requested label, not any of them.
+                for label_key, label_value in label_filters.items():
+                    label_match = select(SqlConversationLabel.conversation_id).where(
+                        SqlConversationLabel.workspace_id == current_workspace_id(),
+                        SqlConversationLabel.key == label_key,
+                        SqlConversationLabel.value == label_value,
+                    )
+                    stmt = stmt.where(SqlConversation.id.in_(label_match))
+            # Inclusive bounds; `is not None` rather than truthiness because 0
+            # is a real epoch and must act as a bound, not read as "unset".
+            if updated_after is not None:
+                stmt = stmt.where(SqlConversation.updated_at >= updated_after)
+            if updated_before is not None:
+                stmt = stmt.where(SqlConversation.updated_at <= updated_before)
             if search_query:
                 pattern = f"%{search_query.lower()}%"
                 title_match = func.lower(SqlConversation.title).like(pattern)

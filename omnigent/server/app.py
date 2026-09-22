@@ -87,9 +87,12 @@ from omnigent.server.routes.default_policies import create_default_policies_rout
 from omnigent.server.routes.dictation import create_dictation_router
 from omnigent.server.routes.extension_assets import create_extension_assets_router
 from omnigent.server.routes.extensions import create_extensions_router
+from omnigent.server.routes.governance import create_governance_router
 from omnigent.server.routes.harnesses import create_harnesses_router
 from omnigent.server.routes.imports import create_imports_router
+from omnigent.server.routes.mcp_config import create_mcp_config_router
 from omnigent.server.routes.policy_registry import create_policy_registry_router
+from omnigent.server.routes.project_context import create_project_context_router
 from omnigent.server.routes.projects import create_projects_router
 from omnigent.server.routes.runner_tunnel import create_runner_tunnel_router
 from omnigent.server.routes.scheduled_tasks import create_scheduled_tasks_router
@@ -116,6 +119,9 @@ from omnigent.stores import (
 )
 from omnigent.stores.comment_store import CommentStore
 from omnigent.stores.conversation_store import SessionConnectivity, runner_seen_is_fresh
+from omnigent.stores.governance_audit_store.sqlalchemy_store import (
+    SqlAlchemyGovernanceAuditStore,
+)
 from omnigent.stores.host_store import HostStore
 from omnigent.stores.permission_store import PermissionStore
 from omnigent.stores.policy_store import PolicyStore
@@ -2794,6 +2800,34 @@ def create_app(
         prefix="/v1",
         tags=["policy_registry"],
     )
+    # Admin-only, server-wide session listing and read-only transcript access.
+    # The access log lives in the main Omnigent database alongside permissions,
+    # so it is built from the conversation store's location (its first
+    # storage_location IS that database) rather than injected separately.
+    app.include_router(
+        create_governance_router(
+            conversation_store,
+            SqlAlchemyGovernanceAuditStore(conversation_store.storage_location),
+            auth_provider=auth_provider,
+            permission_store=permission_store,
+        ),
+        prefix="/v1",
+        tags=["governance"],
+    )
+    # Settings → MCP Servers. Lists/adds/removes/probes the MCP servers
+    # registered with the harness CLIs on a HOST (proxied over the host
+    # tunnel — the server's own ~/.claude.json is read by no agent); never
+    # returns env values, header values, or URL query strings.
+    app.include_router(
+        create_mcp_config_router(
+            auth_provider=auth_provider,
+            permission_store=permission_store,
+            host_store=host_store,
+            host_registry=host_registry,
+        ),
+        prefix="/v1",
+        tags=["mcp-config"],
+    )
     if scheduled_task_store is not None:
         app.include_router(
             create_scheduled_tasks_router(
@@ -2828,6 +2862,19 @@ def create_app(
             ),
             prefix="/v1",
             tags=["projects"],
+        )
+        # Per-project context repositories (designs/PROJECT_CONTEXT.md):
+        # owner-scoped file/graph/proposal routes plus the session-scoped
+        # read views the agent context tools call.
+        app.include_router(
+            create_project_context_router(
+                project_store=project_store,
+                conversation_store=conversation_store,
+                auth_provider=auth_provider,
+                permission_store=permission_store,
+            ),
+            prefix="/v1",
+            tags=["project-context"],
         )
 
     # ── Tunnel lifecycle callbacks (Step 8.5 crash recovery) ───

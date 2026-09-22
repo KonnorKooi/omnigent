@@ -639,7 +639,7 @@ describe("index.css sidebar canvas", () => {
   )?.[0];
 
   it("uses the specified left-to-right gradient for Omnigent light", () => {
-    expect(omniLightRule).toContain("background: linear-gradient(90deg, #fffefe, #fcf6fa)");
+    expect(omniLightRule).toContain("background: linear-gradient(90deg, #fffefe, #f6faf7)");
   });
 
   it("removes the dot-grid layer from both modes", () => {

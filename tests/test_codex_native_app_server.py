@@ -240,9 +240,23 @@ async def test_discover_codex_model_options_strips_secrets_and_stops_process(
 # — additionally pre-approves the four its routed spawns run on: discover the
 # agent, start the routed child, deliver the task, collect the result. Nobody is
 # watching for an approval prompt in the middle of a spawn.
-_PLAIN_TOOL_APPROVALS = {"sys_session_rename": {"approval_mode": "approve"}}
+_CONTEXT_TOOL_APPROVALS = {
+    name: {"approval_mode": "approve"}
+    for name in (
+        "context_list",
+        "context_read",
+        "context_search",
+        "graph_query",
+        "graph_neighbors",
+    )
+}
+_PLAIN_TOOL_APPROVALS = {
+    "sys_session_rename": {"approval_mode": "approve"},
+    **_CONTEXT_TOOL_APPROVALS,
+}
 _ROUTED_TOOL_APPROVALS = {
     "sys_session_rename": {"approval_mode": "approve"},
+    **_CONTEXT_TOOL_APPROVALS,
     "sys_session_create": {"approval_mode": "approve"},
     "sys_agent_list": {"approval_mode": "approve"},
     "sys_session_send": {"approval_mode": "approve"},

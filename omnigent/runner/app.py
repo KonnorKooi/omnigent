@@ -4686,6 +4686,19 @@ def create_runner_app(
                 )
         return converted
 
+    async def _project_context_framework_instructions(
+        session_id: str, harness_name: str | None
+    ) -> list[str]:
+        """Project context as a framework instruction for a composed-instruction turn.
+
+        Native TUIs never read composed instructions (claude/codex get the same
+        text through their startup channel at launch), so they are skipped.
+        """
+        if is_native_harness(harness_name):
+            return []
+        text = await _native_runtime._fetch_project_context_injection(server_client, session_id)
+        return [text] if text else []
+
     def _convert_raw_items_to_input(
         items: list[_JsonObject],
     ) -> list[_JsonObject]:
@@ -7739,15 +7752,20 @@ def create_runner_app(
             )
             # Gated harnesses use nullable to avoid the fallback literal.
             _authored_bg = raw_author_instructions(cached_spec) is not None
+            _bg_framework = await _project_context_framework_instructions(conv, harness_name)
             if harness_name in _GATED_COMPOSED_INSTRUCTION_HARNESSES:
                 instructions = build_instructions_nullable(
-                    cached_spec, _raw_per_request_instructions, []
+                    cached_spec,
+                    _raw_per_request_instructions,
+                    [],
+                    framework_instructions=_bg_framework,
                 )
             else:
                 instructions = build_instructions(
                     cached_spec,
                     _raw_per_request_instructions,
                     [],
+                    framework_instructions=_bg_framework,
                 )
             # Warn once per (conversation, harness, delivery) if the agent has
             # authored instructions but the harness can't deliver them.
@@ -8312,10 +8330,16 @@ def create_runner_app(
                     if _instr_spec_ds is not None:
                         _per_req_instr = cast(str | None, body.get("instructions"))
                         _authored_ds = raw_author_instructions(_instr_spec_ds) is not None
+                        _ds_framework = await _project_context_framework_instructions(
+                            conv_id, harness_name
+                        )
                         _ic_ds = InstructionComposition(
                             authored_present=_authored_ds,
                             composed=build_instructions_nullable(
-                                _instr_spec_ds, _per_req_instr, []
+                                _instr_spec_ds,
+                                _per_req_instr,
+                                [],
+                                framework_instructions=_ds_framework,
                             ),
                         )
                         # Gated harnesses get nullable — skip the fallback literal.
@@ -8327,7 +8351,10 @@ def create_runner_app(
                             _instr_body = {
                                 **body,
                                 "instructions": build_instructions(
-                                    _instr_spec_ds, _per_req_instr, []
+                                    _instr_spec_ds,
+                                    _per_req_instr,
+                                    [],
+                                    framework_instructions=_ds_framework,
                                 ),
                             }
                         if _authored_ds and harness_name:
@@ -10932,6 +10959,33 @@ def create_runner_app(
             content={"models": _with_model_configuration_source(session_id, models)},
         )
 
+    async def get_session_antigravity_model_options(session_id: str) -> JSONResponse:
+        """List the models the signed-in agy account can use (``agy models``)."""
+        from omnigent.harnesses.antigravity_native.launch import list_agy_cli_model_options
+
+        try:
+            models = await asyncio.to_thread(list_agy_cli_model_options)
+        except Exception as exc:  # noqa: BLE001 - picker failures are retryable.
+            _logger.warning(
+                "Antigravity-native model discovery failed for session=%s",
+                session_id,
+                exc_info=True,
+                extra={"session_id": session_id},
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "antigravity_native_model_options_failed",
+                    "detail": _client_safe_error_detail(
+                        exc, context="antigravity-native model options"
+                    ),
+                },
+            )
+        return JSONResponse(
+            status_code=200,
+            content={"models": _with_model_configuration_source(session_id, models)},
+        )
+
     @app.get("/v1/sessions/{session_id}/cursor-model-options")
     async def get_session_cursor_model_options(session_id: str) -> JSONResponse:
         if _session_harness_name(session_id) != "cursor-native":
@@ -11080,6 +11134,8 @@ def create_runner_app(
             return await get_session_cursor_model_options(session_id)
         if harness == "kiro-native":
             return await get_session_kiro_model_options(session_id)
+        if harness == "antigravity-native":
+            return await get_session_antigravity_model_options(session_id)
         return JSONResponse(status_code=200, content={"models": []})
 
     @app.post("/v1/sessions/{session_id}/skills/resolve")

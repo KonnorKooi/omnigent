@@ -1180,6 +1180,98 @@
         "title": "CompletedEvent",
         "type": "object"
       },
+      "ContextFileCreateRequest": {
+        "additionalProperties": false,
+        "description": "Body for `POST /projects/{id}/context/files`.",
+        "properties": {
+          "content": {
+            "default": "",
+            "description": "Initial content.",
+            "title": "Content",
+            "type": "string"
+          },
+          "path": {
+            "description": "Relative path under `system/` or `wiki/`.",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "ContextFileCreateRequest",
+        "type": "object"
+      },
+      "ContextFileRenameRequest": {
+        "additionalProperties": false,
+        "description": "Body for `POST /projects/{id}/context/files/rename`.",
+        "properties": {
+          "new_path": {
+            "description": "Destination relative path.",
+            "title": "New Path",
+            "type": "string"
+          },
+          "path": {
+            "description": "Existing relative path.",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "new_path"
+        ],
+        "title": "ContextFileRenameRequest",
+        "type": "object"
+      },
+      "ContextFileWriteRequest": {
+        "additionalProperties": false,
+        "description": "Body for `PUT /projects/{id}/context/files`.",
+        "properties": {
+          "base_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sha256 of the content the client loaded, or `None` when creating a file that should not exist yet.",
+            "title": "Base Sha"
+          },
+          "content": {
+            "description": "New file content.",
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ContextFileWriteRequest",
+        "type": "object"
+      },
+      "ContextUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Body for `POST /projects/{id}/context/update`.",
+        "properties": {
+          "code_graph": {
+            "default": true,
+            "description": "Run the graphify code-graph refresh step.",
+            "title": "Code Graph",
+            "type": "boolean"
+          },
+          "proposals": {
+            "default": true,
+            "description": "Run the curator proposals step.",
+            "title": "Proposals",
+            "type": "boolean"
+          }
+        },
+        "title": "ContextUpdateRequest",
+        "type": "object"
+      },
       "ConversationDeleted": {
         "description": "Confirmation payload returned after deleting a conversation.",
         "properties": {
@@ -2517,6 +2609,166 @@
         "title": "FunctionCallOutputData",
         "type": "object"
       },
+      "GovernanceSessionItem": {
+        "description": "One session as the governance table renders it.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "created_at": {
+            "format": "int64",
+            "title": "Created At",
+            "type": "integer"
+          },
+          "external_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Session Id"
+          },
+          "git_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Branch"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "item_count": {
+            "format": "int64",
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "total_cost_usd": {
+            "anyOf": [
+              {
+                "format": "double",
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`None` means the session was never priced, which is a different answer from a genuine `0.0` \u2014 the UI shows an em dash for the former.",
+            "title": "Total Cost Usd"
+          },
+          "updated_at": {
+            "format": "int64",
+            "title": "Updated At",
+            "type": "integer"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "item_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GovernanceSessionItem",
+        "type": "object"
+      },
+      "GovernanceSessionList": {
+        "description": "One cursor-paged slice of the server-wide session list.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/GovernanceSessionItem"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "first_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Id"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "last_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Id"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "GovernanceSessionList",
+        "type": "object"
+      },
       "GrantPermissionRequest": {
         "description": "Request body for `PUT /v1/sessions/{id}/permissions`.",
         "properties": {
@@ -3094,6 +3346,81 @@
           "transport"
         ],
         "title": "MCPServerSummary",
+        "type": "object"
+      },
+      "McpServerSpec": {
+        "description": "Request body for adding an MCP server.",
+        "properties": {
+          "args": {
+            "description": "Arguments for a stdio server.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Args",
+            "type": "array"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Executable for a stdio server, e.g. `\"npx\"`.",
+            "title": "Command"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Environment variables for a stdio server. Values ARE secrets and are never echoed back.",
+            "title": "Env",
+            "type": "object"
+          },
+          "harness": {
+            "default": "claude",
+            "description": "Target harness CLI \u2014 `\"claude\"` or `\"codex\"`.",
+            "title": "Harness",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Extra headers for an http-family server (e.g. `Authorization`). Values ARE secrets and are never echoed back.",
+            "title": "Headers",
+            "type": "object"
+          },
+          "name": {
+            "description": "Server name, unique per harness.",
+            "title": "Name",
+            "type": "string"
+          },
+          "transport": {
+            "default": "stdio",
+            "description": "`\"stdio\"` (spawns `command`) or `\"http\"`/`\"sse\"` (connects to `url`).",
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Endpoint for an http-family server.",
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "McpServerSpec",
         "type": "object"
       },
       "McpServerStartup": {
@@ -9167,6 +9494,268 @@
         ]
       }
     },
+    "/v1/governance/sessions": {
+      "get": {
+        "description": "List every user's top-level sessions, newest first.\n\nSub-agent sessions are omitted \u2014 they are audited through the\nparent session that spawned them.\n\nCursors track the store's page, not the rows left after the\nin-Python source trim. A page the trim empties completely must\nstill hand back an id to resume from, or the caller sees\n`has_more` with nothing to page on and stops early \u2014 silently\nhiding later matches on a surface whose whole job is to hide\nnothing. Rows the trim dropped were evaluated and rejected, so\nresuming past them skips nothing.\n\n**Returns:** One cursor-paged slice of the server-wide list.",
+        "operationId": "list_governance_sessions_v1_governance_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace_prefix",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Prefix"
+            }
+          },
+          {
+            "in": "query",
+            "name": "updated_after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Updated After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "updated_before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Updated Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search_query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "pattern": "^(asc|desc)$",
+              "title": "Order",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "default": "updated_at",
+              "pattern": "^(created_at|updated_at)$",
+              "title": "Sort By",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceSessionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Governance Sessions",
+        "tags": [
+          "governance"
+        ]
+      }
+    },
+    "/v1/governance/sessions/{session_id}": {
+      "get": {
+        "description": "Return one session's governance row, whoever owns it.\n\n**Returns:** The same row the listing would show for this session.",
+        "operationId": "get_governance_session_v1_governance_sessions__session_id__get",
+        "parameters": [
+          {
+            "description": "The session to inspect, e.g. `\"conv_abc123\"`.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceSessionItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Governance Session",
+        "tags": [
+          "governance"
+        ]
+      }
+    },
     "/v1/harnesses": {
       "get": {
         "operationId": "list_harnesses_v1_harnesses_get",
@@ -10067,6 +10656,355 @@
         ]
       }
     },
+    "/v1/mcp-config/servers": {
+      "get": {
+        "description": "List MCP servers registered with the harness CLIs on a host.\n\nReturns each server's name, harness, transport, command/url, env key\nnames (never values), and a resolvability status.\n\n**Returns:** `{\"data\": [...], \"host_id\": str}`.",
+        "operationId": "list_mcp_servers_v1_mcp_config_servers_get",
+        "parameters": [
+          {
+            "description": "Host to read; omit to use the single online host.",
+            "in": "query",
+            "name": "host_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Host Id"
+            }
+          },
+          {
+            "description": "Restrict to one harness; omit for all.",
+            "in": "query",
+            "name": "harness",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Mcp Servers V1 Mcp Config Servers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mcp Servers",
+        "tags": [
+          "mcp-config"
+        ]
+      },
+      "post": {
+        "description": "Register an MCP server with a harness CLI on a host.\n\nA stdio server is an arbitrary command that the harness will execute\non the host at the next session start. On workspace hosts, admin is\nrequired; on personal hosts, the owner may manage their own config.\n\n**Parameters**\n\n- `body` \u2014 The server definition. Secret values in `env` / `headers` are written to the host's config and never echoed.\n\n**Returns:** `{\"name\", \"harness\", \"host_id\", \"restart_required\", \"detail\"}`.",
+        "operationId": "add_mcp_server_v1_mcp_config_servers_post",
+        "parameters": [
+          {
+            "description": "Host to write; omit to use the single online host.",
+            "in": "query",
+            "name": "host_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Host Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpServerSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Mcp Server V1 Mcp Config Servers Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Mcp Server",
+        "tags": [
+          "mcp-config"
+        ]
+      }
+    },
+    "/v1/mcp-config/servers/{name}": {
+      "delete": {
+        "description": "Unregister an MCP server from a harness CLI on a host.\n\n**Returns:** `{\"name\", \"harness\", \"host_id\", \"restart_required\", \"detail\"}`.",
+        "operationId": "remove_mcp_server_v1_mcp_config_servers__name__delete",
+        "parameters": [
+          {
+            "description": "The server name to remove.",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Which harness's config to remove it from.",
+            "in": "query",
+            "name": "harness",
+            "required": false,
+            "schema": {
+              "default": "claude",
+              "title": "Harness",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Host to write; omit to use the single online host.",
+            "in": "query",
+            "name": "host_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Host Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Mcp Server V1 Mcp Config Servers  Name  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Mcp Server",
+        "tags": [
+          "mcp-config"
+        ]
+      },
+      "put": {
+        "description": "Update an existing MCP server on a host (remove + re-add).\n\n**Parameters**\n\n- `body` \u2014 The new server definition. The `name` in the path is authoritative; `body.name` is ignored.\n\n**Returns:** `{\"name\", \"harness\", \"host_id\", \"restart_required\", \"detail\"}`.",
+        "operationId": "update_mcp_server_v1_mcp_config_servers__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Host to write; omit to use the single online host.",
+            "in": "query",
+            "name": "host_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Host Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpServerSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Mcp Server V1 Mcp Config Servers  Name  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Mcp Server",
+        "tags": [
+          "mcp-config"
+        ]
+      }
+    },
+    "/v1/mcp-config/servers/{name}/probe": {
+      "post": {
+        "description": "Live-probe ONE MCP server on the host for real usability.\n\nLaunches the named server the way a runner would (augmented PATH + its\nown env), runs the MCP `initialize` handshake, and lists its tools \u2014\nthe definitive \"usable from Omnigent\" check, stronger than the\nPATH-resolvability status the list returns. Runs on the host, where the\nserver would actually be spawned, so a probe that passes here means it\nwill work in a session. Per-request and opt-in, never fired by the\nlist, so loading Settings does not spawn a process per server.\n\n**Returns:** `{\"name\", \"usable\": bool, \"tool_count\": int, \"detail\": str}`.",
+        "operationId": "probe_server_v1_mcp_config_servers__name__probe_post",
+        "parameters": [
+          {
+            "description": "The server name to probe.",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Which harness's config the server is in.",
+            "in": "query",
+            "name": "harness",
+            "required": false,
+            "schema": {
+              "default": "claude",
+              "title": "Harness",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Host to probe on; omit to use the single online host.",
+            "in": "query",
+            "name": "host_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Host Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Probe Server V1 Mcp Config Servers  Name  Probe Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Probe Server",
+        "tags": [
+          "mcp-config"
+        ]
+      }
+    },
     "/v1/me": {
       "get": {
         "description": "Return the current user's identity.\n\nReads the user from the auth provider (same logic that\nsession routes use). The frontend calls this on load to\ndiscover who it is.\n\nAlso returns `is_admin` \u2014 the mode-agnostic admin signal\n(the shared `users.is_admin` column, set by the admin-list\npromotion at login). The SPA gates admin chrome on it in\nEVERY mode, including OIDC/SSO where the accounts-only\n`/auth/me` endpoint does not exist.\n\nWhen OIDC is active and the user is unauthenticated,\nreturns 401 with a `login_url` so the frontend knows\nwhere to redirect.\n\n**Returns:** `{\"user_id\": \"alice@example.com\", \"is_admin\": true}`, `{\"user_id\": null, \"is_admin\": false}` if unauthenticated in header mode, or 401 with `login_url` in OIDC mode.",
@@ -10528,6 +11466,906 @@
         "summary": "Update Project",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context": {
+      "get": {
+        "description": "Return the project's context status, tree, and injected size.\n\n**Returns:** `{\"configured\": False}` when unset, otherwise the service status (paths, exists, git, graphify availability, tree, ...).",
+        "operationId": "get_context_status_v1_projects__project_id__context_get",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Context Status V1 Projects  Project Id  Context Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Context Status",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/files": {
+      "delete": {
+        "description": "Delete a markdown file under `system/` or `wiki/`.\n\n**Returns:** `{\"path\", \"deleted\", \"commit\"}`.",
+        "operationId": "delete_context_file_v1_projects__project_id__context_files_delete",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Relative path.",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Context File V1 Projects  Project Id  Context Files Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Context File",
+        "tags": [
+          "project-context"
+        ]
+      },
+      "get": {
+        "description": "Read one context file (content + sha).\n\n**Returns:** See `ContextService.read`.",
+        "operationId": "read_context_file_v1_projects__project_id__context_files_get",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Relative path, e.g. `wiki/a.md`.",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Context File V1 Projects  Project Id  Context Files Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Context File",
+        "tags": [
+          "project-context"
+        ]
+      },
+      "post": {
+        "description": "Create a new markdown file under `system/` or `wiki/`.\n\n**Parameters**\n\n- `body` \u2014 Path and initial content.\n\n**Returns:** `{\"path\", \"sha\", \"size\", \"commit\"}`.",
+        "operationId": "create_context_file_v1_projects__project_id__context_files_post",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextFileCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Context File V1 Projects  Project Id  Context Files Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Context File",
+        "tags": [
+          "project-context"
+        ]
+      },
+      "put": {
+        "description": "Save a context file with optimistic concurrency (409 on conflict).\n\n**Parameters**\n\n- `body` \u2014 New content and the loaded sha.\n\n**Returns:** `{\"path\", \"sha\", \"size\", \"commit\"}`.",
+        "operationId": "write_context_file_v1_projects__project_id__context_files_put",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Relative path under `system/` or `wiki/`.",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextFileWriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Write Context File V1 Projects  Project Id  Context Files Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Context File",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/files/rename": {
+      "post": {
+        "description": "Rename a markdown file within `system/` / `wiki/`.\n\n**Parameters**\n\n- `body` \u2014 Source and destination paths.\n\n**Returns:** `{\"path\", \"old_path\", \"commit\"}`.",
+        "operationId": "rename_context_file_v1_projects__project_id__context_files_rename_post",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextFileRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rename Context File V1 Projects  Project Id  Context Files Rename Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Context File",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/graph": {
+      "get": {
+        "description": "Nodes and edges for the Graph view.\n\n**Returns:** `{\"kind\", \"nodes\", \"edges\", \"truncated\", ...}`.",
+        "operationId": "get_context_graph_v1_projects__project_id__context_graph_get",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`knowledge` (markdown links) or `code` (graphify).",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "knowledge",
+              "pattern": "^(knowledge|code)$",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Node cap for the code graph.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Context Graph V1 Projects  Project Id  Context Graph Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Context Graph",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/history": {
+      "get": {
+        "description": "Git log of the context directory.\n\n**Returns:** `{\"versioned\", \"commits\"}`.",
+        "operationId": "get_context_history_v1_projects__project_id__context_history_get",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum commits.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Context History V1 Projects  Project Id  Context History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Context History",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/init": {
+      "post": {
+        "description": "Scaffold the context directory layout (idempotent).\n\n**Returns:** `{\"created\": [...]}` plus the fresh status.",
+        "operationId": "init_context_v1_projects__project_id__context_init_post",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Init Context V1 Projects  Project Id  Context Init Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Init Context",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/jobs/{job_id}": {
+      "get": {
+        "description": "Poll an Update context job.\n\n**Returns:** Job status, steps and log.",
+        "operationId": "get_context_job_v1_projects__project_id__context_jobs__job_id__get",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Job id.",
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Context Job V1 Projects  Project Id  Context Jobs  Job Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Context Job",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/preview": {
+      "get": {
+        "description": "Return the exact startup text sessions in this project receive.\n\n**Returns:** See `ContextService.injected_context`.",
+        "operationId": "preview_injected_context_v1_projects__project_id__context_preview_get",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Injected Context V1 Projects  Project Id  Context Preview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Injected Context",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/proposals": {
+      "get": {
+        "description": "Pending proposals with current file content for diffing.\n\n**Returns:** `{\"proposals\": [...]}`.",
+        "operationId": "list_context_proposals_v1_projects__project_id__context_proposals_get",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Context Proposals V1 Projects  Project Id  Context Proposals Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Context Proposals",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/proposals/{proposal_id}/apply": {
+      "post": {
+        "description": "Apply a proposal (write + commit) and remove it.\n\n**Returns:** The write result.\n\n**Raises**\n\n- `OmnigentError` \u2014 409 when the file changed since the proposal.",
+        "operationId": "apply_context_proposal_v1_projects__project_id__context_proposals__proposal_id__apply_post",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Proposal id.",
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Apply Context Proposal V1 Projects  Project Id  Context Proposals  Proposal Id  Apply Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Context Proposal",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/proposals/{proposal_id}/reject": {
+      "post": {
+        "description": "Discard a proposal.\n\n**Returns:** `{\"id\", \"rejected\": True}`.",
+        "operationId": "reject_context_proposal_v1_projects__project_id__context_proposals__proposal_id__reject_post",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Proposal id.",
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reject Context Proposal V1 Projects  Project Id  Context Proposals  Proposal Id  Reject Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Context Proposal",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/search": {
+      "get": {
+        "description": "Search markdown/text files.\n\n**Returns:** See `ContextService.search`.",
+        "operationId": "search_context_v1_projects__project_id__context_search_get",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Query text.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum hits.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Search Context V1 Projects  Project Id  Context Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Context",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/context/update": {
+      "post": {
+        "description": "Start the Update context job (one at a time per project).\n\n**Parameters**\n\n- `body` \u2014 Which steps to run (all by default).\n\n**Returns:** The new job (poll `jobs/{job_id}`).\n\n**Raises**\n\n- `OmnigentError` \u2014 409 when a job is already running.",
+        "operationId": "start_context_update_v1_projects__project_id__context_update_post",
+        "parameters": [
+          {
+            "description": "Project id.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ContextUpdateRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Start Context Update V1 Projects  Project Id  Context Update Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Context Update",
+        "tags": [
+          "project-context"
         ]
       }
     },
@@ -12130,6 +13968,438 @@
         "summary": "Update Comment",
         "tags": [
           "comments"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/context/files": {
+      "get": {
+        "description": "Read a context file paged by lines for `context_read`.\n\n**Returns:** `{\"path\", \"content\", \"offset\", \"lines\", \"total_lines\", \"truncated\"}`.",
+        "operationId": "session_context_read_v1_sessions__session_id__context_files_get",
+        "parameters": [
+          {
+            "description": "Session id.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Relative path.",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "description": "First line (zero-based).",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Maximum lines.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 400,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Session Context Read V1 Sessions  Session Id  Context Files Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Context Read",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/context/graph/neighbors": {
+      "get": {
+        "description": "Neighbours of a code-graph node for `graph_neighbors`.\n\n**Returns:** See `ContextService.graph_neighbors`.",
+        "operationId": "session_graph_neighbors_v1_sessions__session_id__context_graph_neighbors_get",
+        "parameters": [
+          {
+            "description": "Session id.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Node id or label.",
+            "in": "query",
+            "name": "node",
+            "required": true,
+            "schema": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Node",
+              "type": "string"
+            }
+          },
+          {
+            "description": "1 or 2 hops.",
+            "in": "query",
+            "name": "depth",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 2,
+              "minimum": 1,
+              "title": "Depth",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Session Graph Neighbors V1 Sessions  Session Id  Context Graph Neighbors Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Graph Neighbors",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/context/graph/query": {
+      "get": {
+        "description": "Query the code graph for `graph_query`.\n\n**Returns:** See `ContextService.graph_query`.",
+        "operationId": "session_graph_query_v1_sessions__session_id__context_graph_query_get",
+        "parameters": [
+          {
+            "description": "Session id.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Question text.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Approximate token budget.",
+            "in": "query",
+            "name": "budget",
+            "required": false,
+            "schema": {
+              "default": 2000,
+              "maximum": 8000,
+              "minimum": 100,
+              "title": "Budget",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Session Graph Query V1 Sessions  Session Id  Context Graph Query Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Graph Query",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/context/injected": {
+      "get": {
+        "description": "Startup text for a session's harness launch.\n\n**Returns:** `{\"project_id\", \"text\", \"chars\", \"sha256\", ...}`.",
+        "operationId": "session_injected_context_v1_sessions__session_id__context_injected_get",
+        "parameters": [
+          {
+            "description": "Session id.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Session Injected Context V1 Sessions  Session Id  Context Injected Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Injected Context",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/context/list": {
+      "get": {
+        "description": "Index of `system/` and `wiki/` files for `context_list`.\n\n**Returns:** `{\"project_id\", \"files\", \"has_code_graph\"}`.",
+        "operationId": "session_context_list_v1_sessions__session_id__context_list_get",
+        "parameters": [
+          {
+            "description": "Session id.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Session Context List V1 Sessions  Session Id  Context List Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Context List",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/context/search": {
+      "get": {
+        "description": "Search context files for `context_search`.\n\n**Returns:** See `ContextService.search`.",
+        "operationId": "session_context_search_v1_sessions__session_id__context_search_get",
+        "parameters": [
+          {
+            "description": "Session id.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Query text.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum hits.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Session Context Search V1 Sessions  Session Id  Context Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Context Search",
+        "tags": [
+          "project-context"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/context/trace": {
+      "get": {
+        "description": "Injected context and recorded context tool calls for the session tab.\n\nReading the trace is not itself traced.\n\n**Returns:** `{\"project_id\", \"project_name\", \"injected\", \"events\"}` where `injected` is the text sessions receive now and `events` the recorded injections and tool calls, oldest first.",
+        "operationId": "session_context_trace_v1_sessions__session_id__context_trace_get",
+        "parameters": [
+          {
+            "description": "Session id.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Session Context Trace V1 Sessions  Session Id  Context Trace Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Context Trace",
+        "tags": [
+          "project-context"
         ]
       }
     },

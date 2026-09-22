@@ -11698,6 +11698,47 @@ async def test_cross_path_resolution_contract(
         )
 
 
+_PROJECT_CONTEXT_TEXT = "# Project context\n\n## Project rules (system/)\n\nUse uv."
+
+
+class _ProjectContextServerClient(_ContractSnapshotClient):
+    """Snapshot client whose session has project context configured."""
+
+    async def get(self, url: str, **kwargs: object) -> NullServerClient._Response:
+        if url.endswith(f"/v1/sessions/{self._conv}/context/injected"):
+
+            class _Resp(NullServerClient._Response):
+                status_code = 200
+
+                def json(self) -> dict[str, object]:
+                    return {"text": _PROJECT_CONTEXT_TEXT}
+
+            return _Resp()
+        return await super().get(url, **kwargs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["no_harness", "background"])
+async def test_project_context_appended_to_composed_instructions(path: str) -> None:
+    """A session's project context rides the composed instructions as framework text."""
+    conv = f"conv_project_context_{path}"
+    recording = _RecordingHarnessClient(_INSTRUCTION_WARN_CHUNKS)
+    app = create_runner_app(
+        process_manager=cast(HarnessProcessManager, _FakeProcessManager(recording)),
+        spec_resolver=_contract_resolver_for("child_present", []),
+        server_client=_ProjectContextServerClient(conv),  # type: ignore[arg-type]
+    )
+    async with _runner_test_client(app) as http:
+        result = await _CONTRACT_ADAPTERS[path](http, conv, recording)
+
+    assert result["instructions"] == "\n\n".join(
+        (
+            _contract_composed_instructions("Worker instructions."),
+            _PROJECT_CONTEXT_TEXT,
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # Unit tests for _response_failed_event source propagation
 # ---------------------------------------------------------------------------

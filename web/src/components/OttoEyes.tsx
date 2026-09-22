@@ -1,26 +1,19 @@
 import { useEffect, useRef } from "react";
 import { OttoIcon } from "@/components/icons/OttoIcon";
 
-// Eye geometry in the SVG's own viewBox coordinate system (0 0 1024 1024).
-// Each of Otto's eyes is a fixed near-circular white with a concentric pupil
-// drawn on top; the pupil can slide until its rim meets the inner edge of
-// the white, i.e. up to (whiteRadius - pupilRadius) away from the eye center.
-const VIEWBOX_W = 1024;
-const VIEWBOX_H = 1024;
-// Radii measured off the main-eye paths in OttoIcon.tsx.
-const WHITE_RADIUS = 71.3;
-const PUPIL_RADIUS = 55.9;
-// How far a pupil may travel before its edge touches the white rim. Capped
-// well below that geometric max (~15.4) to keep the same travel-to-eye-size
-// ratio (~13% of the white radius) as the previous mascots.
-const MAX_OFFSET = Math.min(9.3, WHITE_RADIUS - PUPIL_RADIUS);
+// Eye geometry in the pixel-art SVG's viewBox (0 0 48 48). Each eye is a
+// 3x3 white with a centered 1x1 pupil, so a pupil can step exactly one pixel
+// in any of the 8 directions.
+const VIEWBOX_W = 48;
+const VIEWBOX_H = 48;
+const PIXEL_STEP = 1;
+const OCTANT = Math.PI / 4;
 
-// Centers of Otto's two eyes in `g.otto-pupil` document order — right eye
-// first, then left, matching OttoIcon.tsx. The buddy starfish has no pupil
-// groups, so its eyes stay still.
+// Eye centers in `g.otto-pupil` document order, matching OttoIcon.tsx:
+// Otto, then the joey in the pouch.
 const EYE_CENTERS = [
-  { cx: 619.1, cy: 520.6 },
-  { cx: 413.8, cy: 520.6 },
+  { cx: 36.5, cy: 11.5 },
+  { cx: 36.5, cy: 27.5 },
 ];
 
 interface ScreenPoint {
@@ -183,16 +176,15 @@ function caretPointFor(field: HTMLElement): ScreenPoint | null {
 }
 
 /**
- * The Omnigent starfish mascot (Otto) with eyes that follow the cursor: each
- * black pupil slides to the inner edge of its white eye on the side nearest
- * whatever Otto is watching.
+ * The Omnigent kangaroo mascot (Otto, with a joey in the pouch) whose eyes
+ * follow the cursor: each pupil steps one pixel toward whatever Otto watches.
  *
  * Otto looks at whatever the user last moved: the mouse pointer, or — while a
  * text field (textarea, text input, or contenteditable) is focused — its
  * **text caret**. Moving the mouse pulls his gaze to the pointer even while a
  * field is focused; a genuine caret move (typing, paste/delete, arrow/Home/End
- * navigation, click-to-reposition) pulls it back. The pupils' 90ms transform
- * transition (below) smooths every hand-off.
+ * navigation, click-to-reposition) pulls it back. Pupils snap between pixels
+ * with no transition, keeping the pixel-art look.
  *
  * On mount the pupils sit centered (no transform written) — focusing a field
  * (including the composer's autofocus) only marks it eligible for
@@ -200,7 +192,7 @@ function caretPointFor(field: HTMLElement): ScreenPoint | null {
  * mouse or the caret.
  *
  * The art lives in OttoIcon; this component drives its two `g.otto-pupil`
- * groups (black disc + glint) through the forwarded ref. Updates are
+ * groups through the forwarded ref. Updates are
  * coalesced into a single rAF callback and applied straight to the DOM
  * nodes, so tracking never re-renders React. Respects
  * `prefers-reduced-motion` by leaving the pupils centered.
@@ -216,11 +208,6 @@ export function OttoEyes({ className }: { className?: string }) {
     // Class-selector contract with OttoIcon (pinned by OttoIcon.test.tsx);
     // querySelectorAll fails silently, so a rename would freeze the eyes.
     const pupils = Array.from(svg.querySelectorAll<SVGGElement>("g.otto-pupil"));
-    for (const pupil of pupils) {
-      // Smooths each pupil's slide toward its target rather than snapping.
-      pupil.style.transition = "transform 90ms ease-out";
-      pupil.style.willChange = "transform";
-    }
 
     let frame = 0;
     let pointer: ScreenPoint | null = null;
@@ -282,11 +269,12 @@ export function OttoEyes({ className }: { className?: string }) {
           pupil.style.transform = "translate(0px, 0px)";
           return;
         }
-        // Always ride the rim toward the target. translate() px units on an
-        // SVG element resolve to user-space units, so MAX_OFFSET is correct.
-        const tx = (dx / dist) * MAX_OFFSET;
-        const ty = (dy / dist) * MAX_OFFSET;
-        pupil.style.transform = `translate(${tx.toFixed(3)}px, ${ty.toFixed(3)}px)`;
+        // Snap the gaze to the nearest of 8 directions so the pupil lands on
+        // whole grid pixels. translate() px resolves to user-space units.
+        const angle = Math.round(Math.atan2(dy, dx) / OCTANT) * OCTANT;
+        const tx = Math.round(Math.cos(angle)) * PIXEL_STEP;
+        const ty = Math.round(Math.sin(angle)) * PIXEL_STEP;
+        pupil.style.transform = `translate(${tx}px, ${ty}px)`;
       });
     };
 

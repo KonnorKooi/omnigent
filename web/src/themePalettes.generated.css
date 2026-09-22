@@ -25,7 +25,7 @@
   --button-border: #d6d6d6;
   --input: #e4e4e7;
   --ring: #11171c;
-  --brand-accent: #df3c85;
+  --brand-accent: #1f7a44;
   --sidebar: #fdfafa;
   --sidebar-foreground: #27272a;
   --sidebar-primary: #2272b4;
@@ -34,8 +34,8 @@
   --sidebar-accent-foreground: #04355d;
   --sidebar-border: #e4e4e7;
   --sidebar-ring: #2272b4;
-  --sidebar-active: rgba(240, 1, 150, 0.1);
-  --sidebar-active-foreground: #651249;
+  --sidebar-active: rgba(31, 122, 68, 0.1);
+  --sidebar-active-foreground: #124c2b;
 }
 
 :root:not(.dark):not([data-theme]) .app-shell {
@@ -43,7 +43,7 @@
 }
 
 :root:not(.dark):not([data-theme]) .conversations-sidebar {
-  background: linear-gradient(90deg, #fffefe, #fcf6fa);
+  background: linear-gradient(90deg, #fffefe, #f6faf7);
 }
 
 .dark:not([data-theme]) {
@@ -71,7 +71,7 @@
   --button-border: #d6d6d6;
   --input: oklch(0.28 0.005 240);
   --ring: #e8ecf0;
-  --brand-accent: #df3c85;
+  --brand-accent: #4caf70;
   --sidebar: rgba(17, 23, 28, 0.75);
   --sidebar-foreground: oklch(0.965 0.003 240);
   --sidebar-primary: oklch(0.64 0.22 254);
@@ -80,20 +80,20 @@
   --sidebar-accent-foreground: oklch(0.965 0.003 240);
   --sidebar-border: oklch(0.28 0.005 240);
   --sidebar-ring: oklch(0.92 0.003 240 / 0.4);
-  --sidebar-active: rgba(240, 1, 150, 0.15);
-  --sidebar-active-foreground: #f472b6;
+  --sidebar-active: rgba(31, 122, 68, 0.18);
+  --sidebar-active-foreground: #86efac;
 }
 
 .dark:not([data-theme]) .app-shell {
   background:
-    radial-gradient(rgba(100, 40, 180, 0.12), transparent 50%),
-    radial-gradient(at 80% 20%, rgba(80, 30, 140, 0.08), transparent 45%),
-    linear-gradient(145deg, #1a0e2d, #0e1418, #130e1b);
+    radial-gradient(rgba(34, 110, 66, 0.14), transparent 50%),
+    radial-gradient(at 80% 20%, rgba(22, 88, 52, 0.1), transparent 45%),
+    linear-gradient(145deg, #0f2419, #0e1418, #101a14);
 }
 
 .dark:not([data-theme]) .conversations-sidebar {
   background:
-    linear-gradient(transparent 35%, rgba(92, 48, 108, 0.2)),
+    linear-gradient(transparent 35%, rgba(34, 94, 60, 0.22)),
     linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 60%);
 }
 

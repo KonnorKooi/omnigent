@@ -28,6 +28,7 @@ from omnigent.harnesses.antigravity_native.bridge import (
     seed_isolated_agy_home,
     send_interaction_keys_via_tui,
     update_conversation_id,
+    write_agy_global_rules,
     write_bridge_state,
     write_mcp_bridge_config,
     write_mcp_config,
@@ -1479,6 +1480,36 @@ def test_write_mcp_bridge_config_is_idempotent(tmp_path: Path) -> None:
     first = (tmp_path / "bridge.json").read_text(encoding="utf-8")
     write_mcp_bridge_config(tmp_path)
     assert (tmp_path / "bridge.json").read_text(encoding="utf-8") == first
+
+
+def test_write_agy_global_rules_carries_real_rules_then_project_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The isolated GEMINI.md holds the user's real rules, then project context."""
+    fake_home = tmp_path / "real-home"
+    (fake_home / ".gemini").mkdir(parents=True)
+    (fake_home / ".gemini" / "GEMINI.md").write_text("Be terse.\n", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+
+    written = write_agy_global_rules(tmp_path / "bridge", "# Project context\n\nUse uv.")
+
+    assert written == agy_gemini_dir(tmp_path / "bridge") / "GEMINI.md"
+    assert written.read_text(encoding="utf-8") == "Be terse.\n\n# Project context\n\nUse uv.\n"
+    # The user's real rules file is never modified.
+    assert (fake_home / ".gemini" / "GEMINI.md").read_text(encoding="utf-8") == "Be terse.\n"
+
+
+def test_write_agy_global_rules_removes_stale_file_without_rules(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no real rules and no project context, a prior launch's file is removed."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path / "real-home"))
+    bridge_dir = tmp_path / "bridge"
+    stale = write_agy_global_rules(bridge_dir, "old context")
+    assert stale is not None and stale.is_file()
+
+    assert write_agy_global_rules(bridge_dir, None) is None
+    assert not stale.exists()
 
 
 def test_seed_isolated_agy_home_seeds_platform_credentials_and_state(

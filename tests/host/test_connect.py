@@ -6054,3 +6054,25 @@ async def test_github_pr_update_reports_lock_contention_on_host(
     assert registry.path.read_bytes() == before
     assert host._handle_fs_write(frame).status == "ok"
     assert (target in {entry.url for entry in registry.list()}) == (action == "attach")
+
+
+@pytest.mark.asyncio
+async def test_handle_model_options_serves_the_agy_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Antigravity's pre-launch picker lists the account's own ``agy models`` rows."""
+    from omnigent.harnesses.antigravity_native import launch as agy_launch
+
+    rows = [
+        {"id": "gemini-3.1-pro-low", "displayName": "Gemini 3.1 Pro (Low)", "isDefault": False}
+    ]
+    monkeypatch.setattr(agy_launch, "list_agy_cli_model_options", lambda: rows)
+    host = _make_host_process()
+
+    result = await host._handle_model_options(
+        HostModelOptionsFrame(request_id="req_models", harness="antigravity-native"),
+    )
+
+    assert result.status == "ok"
+    assert [m["id"] for m in result.models] == ["gemini-3.1-pro-low"]
+    _cleanup_host(host)

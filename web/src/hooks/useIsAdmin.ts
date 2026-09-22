@@ -16,7 +16,19 @@ const QUERY_KEY = ["identity-is-admin"];
  * flag on every admin route regardless — this is chrome only.
  */
 export function useIsAdmin(): boolean {
-  const { data } = useQuery<boolean>({
+  return useIsAdminStatus().isAdmin;
+}
+
+/**
+ * The admin flag plus whether the probe has answered yet.
+ *
+ * `useIsAdmin` seeds `false`, which conflates "not an admin" with "we have
+ * not asked yet". A gate that renders a Forbidden screen cannot tell those
+ * apart and so flashes one at every admin during boot. Surfaces that render
+ * a denial (rather than just hiding chrome) read `isPending` and wait.
+ */
+export function useIsAdminStatus(): { isAdmin: boolean; isPending: boolean } {
+  const { data, isPending } = useQuery<boolean>({
     queryKey: QUERY_KEY,
     queryFn: async () => {
       await resolveIdentity();
@@ -27,5 +39,5 @@ export function useIsAdmin(): boolean {
     // identity resolved during boot (the common case).
     initialData: getCurrentIsAdmin,
   });
-  return data;
+  return { isAdmin: data, isPending };
 }

@@ -51,6 +51,7 @@ import contextlib
 import copy
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, cast
@@ -4954,3 +4955,50 @@ async def test_subagent_idle_check_failure_keeps_mirroring(
 
     monkeypatch.setattr(reader, "get_all_cascade_trajectories", _raise)
     assert await reader._subagent_cascade_is_idle(4242, "child-aaa") is False
+
+
+# ---------------------------------------------------------------------------
+# Discovery: a placeholder left by a slow cold-start adopts the local conversation
+# ---------------------------------------------------------------------------
+
+
+def _write_placeholder_state(bridge_dir: Path, active_turn_id: str | None = None) -> None:
+    bridge_dir.mkdir(parents=True, exist_ok=True)
+    (bridge_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "session_id": _SESSION_ID,
+                "conversation_id": "agy_conv_placeholder",
+                "active_turn_id": active_turn_id,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_placeholder_without_local_conversation_stays_unresolved(tmp_path: Path) -> None:
+    """No conversation in the isolated Gemini dir yet: keep waiting on the placeholder."""
+    bridge_dir = tmp_path / "bridge"
+    _write_placeholder_state(bridge_dir)
+
+    assert reader._resolve_cascade_id(bridge_dir) is None
+    state = read_bridge_state(bridge_dir)
+    assert state is not None and state.conversation_id == "agy_conv_placeholder"
+
+
+def test_placeholder_adopts_newest_local_conversation(tmp_path: Path) -> None:
+    """The newest conversation db in this session's Gemini dir replaces the placeholder."""
+    bridge_dir = tmp_path / "bridge"
+    _write_placeholder_state(bridge_dir, active_turn_id="turn_1")
+    conversations = bridge_dir / "agy-home" / ".gemini" / "antigravity-cli" / "conversations"
+    conversations.mkdir(parents=True)
+    older = conversations / "older-id.db"
+    older.write_bytes(b"")
+    os.utime(older, (1, 1))
+    (conversations / f"{_CASCADE_ID}.db").write_bytes(b"")
+
+    assert reader._resolve_cascade_id(bridge_dir) == _CASCADE_ID
+    state = read_bridge_state(bridge_dir)
+    assert state is not None
+    assert state.conversation_id == _CASCADE_ID
+    assert state.active_turn_id == "turn_1"

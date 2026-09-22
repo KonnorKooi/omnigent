@@ -4,6 +4,7 @@ import {
   FolderTreeIcon,
   FileDiffIcon,
   GlobeIcon,
+  LibraryBigIcon,
   Loader2Icon,
   MaximizeIcon,
   MinimizeIcon,
@@ -50,6 +51,7 @@ import { FilesPanel } from "./FilesPanel";
 import { FileViewer } from "./FileViewer";
 import { GithubPanel } from "./GithubPanel";
 import type { ChangedSort } from "./FlatFileList";
+import { SessionContextPanel } from "./SessionContextPanel";
 import { SubagentsPanel } from "./SubagentsPanel";
 import { useTerminalStatuses } from "./useTerminalStatuses";
 import { type RightRailTab, TAB_BADGE_BASE } from "./railTabs";
@@ -590,6 +592,8 @@ interface WorkspacePanelProps {
   /** Whether the Browser tab is available — Electron shell only (hidden in a
    *  plain web build, which has no embedded WebContentsView). */
   showBrowserTab: boolean;
+  /** Whether the Context tab is available — the session's project has context. */
+  showContextTab?: boolean;
   /** Count of changed files, shown as the Changes tab badge. */
   changedCount: number;
   /** How many child agents are actively working (Agents tab badge). */
@@ -688,6 +692,7 @@ function WorkspacePanelImpl({
   showFilesPanel,
   showGithubTab,
   showBrowserTab,
+  showContextTab = false,
   changedCount,
   subagentsWorking,
   agentCount,
@@ -920,6 +925,19 @@ function WorkspacePanelImpl({
                 </span>
               </TabsTrigger>
             </WorkspaceTabTooltip>
+            {showContextTab && (
+              <WorkspaceTabTooltip label="Project context">
+                <TabsTrigger
+                  value="context"
+                  aria-label="Project context"
+                  disabled={pending}
+                  className="size-6 shrink-0 p-0 hover:border-1 hover:border-muted rounded-md!"
+                >
+                  <LibraryBigIcon />
+                  <span className="sr-only">Project context</span>
+                </TabsTrigger>
+              </WorkspaceTabTooltip>
+            )}
             {showBrowserTab && (
               <WorkspaceTabTooltip label="Browser">
                 <TabsTrigger
@@ -1101,6 +1119,8 @@ function WorkspacePanelImpl({
           />
         ) : rightRailTab === "github" && showGithubTab ? (
           <GithubPanel conversationId={conversationId} />
+        ) : rightRailTab === "context" && showContextTab ? (
+          <SessionContextPanel conversationId={conversationId} />
         ) : rightRailTab === "subagents" && rootSessionId ? (
           <SubagentsPanel conversationId={conversationId} rootSessionId={rootSessionId} />
         ) : (

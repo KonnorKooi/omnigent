@@ -42,6 +42,7 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   MoreHorizontalIcon,
+  LibraryBigIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
@@ -75,7 +76,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "@/lib/routing";
 import { SidebarHeaderActions, SidebarSettingsButton } from "./SidebarHeaderActions";
-import omnigentWordmark from "@/assets/omnigent-wordmark.svg";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -139,7 +139,7 @@ import { useHosts, type Host } from "@/hooks/useHosts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useServerInfo } from "@/lib/CapabilitiesContext";
 import { isFeatureEnabled, isSingleUserMode, sandboxOptionLabel } from "@/lib/capabilities";
-import { useBranding } from "@/lib/branding";
+import { DEFAULT_APP_NAME, useBranding } from "@/lib/branding";
 import { relativeTime } from "@/lib/relativeTime";
 import { USER_SESSION_TITLE_MAX_CHARS } from "@/lib/sessionTitles";
 import { showToast } from "@/components/ui/toast";
@@ -1041,12 +1041,12 @@ function SidebarImpl({
                     {branding.app_name}
                   </span>
                 ) : (
-                  <img
-                    src={omnigentWordmark}
-                    alt="Omnigent"
+                  <span
                     data-testid="sidebar-wordmark"
-                    className="h-[15px] w-auto shrink-0 translate-y-px dark:invert"
-                  />
+                    className="text-[17px] leading-none font-bold tracking-tight"
+                  >
+                    {DEFAULT_APP_NAME}
+                  </span>
                 )}
               </Link>
               {/* On the macOS shell this copy is hidden and an identical cluster
@@ -4598,6 +4598,21 @@ function ProjectFolderMenuItems({
         <Settings2Icon className="size-3.5" />
         Project settings
       </C.Item>
+      {/* Context lives on the first-class project row; label-only folders have none. */}
+      {actions.contextHref && (
+        <C.Item asChild data-testid="project-context-menu">
+          <Link
+            to={actions.contextHref}
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate(e);
+            }}
+          >
+            <LibraryBigIcon className="size-3.5" />
+            Context
+          </Link>
+        </C.Item>
+      )}
       <C.Item data-testid="delete-project" variant="destructive" onSelect={actions.openDelete}>
         <Trash2Icon className="size-3.5" />
         Delete project
@@ -4607,6 +4622,8 @@ function ProjectFolderMenuItems({
 }
 
 interface ProjectFolderMenuActions {
+  /** Project Context page path, or `null` for a label-only folder. */
+  contextHref: string | null;
   openRename: () => void;
   openSettings: () => void;
   openDelete: () => void;
@@ -4654,6 +4671,7 @@ function useProjectFolderMenu(
 
   const actions = useMemo<ProjectFolderMenuActions>(
     () => ({
+      contextHref: projectId ? `/projects/${encodeURIComponent(projectId)}/context` : null,
       openRename: () => {
         setRenameValue(projectName);
         setPendingIcon(undefined);
@@ -4664,7 +4682,7 @@ function useProjectFolderMenu(
       onMenuOpen: () => setMenuOpen(true),
       onMenuClose: () => setMenuOpen(false),
     }),
-    [projectName],
+    [projectName, projectId],
   );
 
   const dialogs = (

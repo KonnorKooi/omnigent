@@ -15,6 +15,7 @@ import {
 import { ComposerAddMenu } from "@/components/composer/ComposerAddMenu";
 import {
   COMPOSER_HARNESS_MENU_SIZE,
+  AgentGuideSection,
   PickerSectionHeader,
 } from "@/components/composer/HarnessMenuRow";
 import {
@@ -36,6 +37,7 @@ import {
   FileTextIcon,
   FolderIcon,
   ImageIcon,
+  InfoIcon,
   PlusIcon,
   ShuffleIcon,
   WandSparklesIcon,
@@ -274,6 +276,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CreateAgentDialog } from "./CreateAgentDialog";
 import { buildAgentBundle, type AgentBundleInput } from "@/lib/agentBundle";
+import { agentGuide } from "@/lib/agentGuides";
 import { createBundledSession, launchRunner } from "@/lib/sessionsApi";
 
 // Short picker-row blurbs — the spec descriptions are long paragraphs that
@@ -1488,20 +1491,25 @@ export function AgentHarnessPicker({
     const more: AvailableAgent[] = [];
     const primaryOrder = ["claude", "cursor", "codex"];
     const secondaryOrder = ["opencode", "pi"];
+    const order = [...primaryOrder, ...secondaryOrder];
     for (const agent of harnessEntries) {
       const selected = agent.id === effectiveAgentId;
       if (!selected && hideUnconfigured && harnessUnconfiguredOnHost(agent.harness, host)) continue;
       const key = nativeCodingAgentForAvailableAgent(agent)?.iconKind ?? "";
-      if (primaryOrder.includes(key)) {
+      // The primary set always leads (a "needs setup" badge stays discoverable);
+      // any other harness the host reports ready joins it instead of "Other".
+      const readyOnHost =
+        agent.harness != null && host?.configured_harnesses?.[agent.harness] === true;
+      if (primaryOrder.includes(key) || readyOnHost) {
         ready.push(agent);
       } else more.push(agent);
     }
-    const rank = (agent: AvailableAgent, order: string[]) => {
+    const rank = (agent: AvailableAgent) => {
       const index = order.indexOf(nativeCodingAgentForAvailableAgent(agent)?.iconKind ?? "");
       return index < 0 ? order.length : index;
     };
-    ready.sort((first, second) => rank(first, primaryOrder) - rank(second, primaryOrder));
-    more.sort((first, second) => rank(first, secondaryOrder) - rank(second, secondaryOrder));
+    ready.sort((first, second) => rank(first) - rank(second));
+    more.sort((first, second) => rank(first) - rank(second));
     return { readyHarnessEntries: ready, moreHarnessEntries: more };
   }, [harnessEntries, host, hideUnconfigured, effectiveAgentId]);
   const selectedOtherHarness = moreHarnessEntries.find((agent) => agent.id === effectiveAgentId);
@@ -2678,6 +2686,7 @@ export function NewChatLandingScreen() {
   } | null>(null);
   // Harness-config modal, opened from the composer's gear icon.
   const [configOpen, setConfigOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   // Mirror the current draft fields into a ref every render so the unmount
   // cleanup below can snapshot the latest values without re-subscribing.
@@ -3097,6 +3106,18 @@ export function NewChatLandingScreen() {
   const supportsCursorMode = nativeAgentHasCapability(selectedAgent, "cursorMode");
   const supportsAgySkipPermissions = nativeAgentHasCapability(selectedAgent, "skipPermissions");
   const supportsModelPicker = nativeAgentHasCapability(selectedAgent, "modelPicker");
+  // agy's models are the account's entitlement (``agy models``), resolved on the
+  // host only while Antigravity is selected: each lookup spawns the agy CLI.
+  const agyModelPicker = selectedNativeHarness === "antigravity-native";
+  const {
+    data: hostAgyModelOptions,
+    isLoading: hostAgyModelsLoading,
+    error: hostAgyModelsError,
+  } = useHostModelOptions(selectedHostId, "antigravity-native", agyModelPicker && !sandboxSelected);
+  const agyModelOptions = useMemo(
+    () => (sandboxSelected ? [] : (hostAgyModelOptions ?? [])),
+    [hostAgyModelOptions, sandboxSelected],
+  );
   const hideUnconfiguredHarnesses = useMemo(() => readHideUnconfiguredHarnesses(), []);
   // The selected native harness, used to persist/seed its option knobs (mode /
   // model / effort), which are harness-specific. null for non-native agents,
@@ -3266,7 +3287,15 @@ export function NewChatLandingScreen() {
     if (supportsAgySkipPermissions) {
       const skipValue =
         AGY_NATIVE_SKIP_MODES.find((m) => m.value === agySkipMode)?.label ?? agySkipMode;
-      return [{ label: "Permissions", value: skipValue }, ...routingRow];
+      const modelRows = routingOn
+        ? routingRow
+        : [
+            {
+              label: "Model",
+              value: agyModelOptions.find((m) => m.id === pickedModel)?.displayName ?? "Default",
+            },
+          ];
+      return [...modelRows, { label: "Permissions", value: skipValue }];
     }
     if (selectedAgent?.harness != null && selectedAgent.harness in brainHarnessLabelsAll) {
       const active = pickedHarness ?? selectedAgent.harness;
@@ -3290,6 +3319,7 @@ export function NewChatLandingScreen() {
     claudeModelOptions,
     codexModelOptions,
     piModelOptions,
+    agyModelOptions,
     pickedEffort,
     permissionMode,
     approvalMode,
@@ -3311,7 +3341,9 @@ export function NewChatLandingScreen() {
       ? piModelOptions
       : selectedNativeHarness === "codex-native"
         ? codexModelOptions
-        : [];
+        : agyModelPicker
+          ? agyModelOptions
+          : [];
   const [pickerModelSearch, setPickerModelSearch] = useState("");
   const pickerModelsLoading =
     !sandboxSelected &&
@@ -3322,13 +3354,17 @@ export function NewChatLandingScreen() {
         ? hostCodexModelsLoading
         : selectedNativeHarness === "pi-native"
           ? hostPiModelsLoading
-          : false);
+          : agyModelPicker
+            ? hostAgyModelsLoading
+            : false);
   const pickerModelsError =
     selectedNativeHarness === "claude-native"
       ? hostClaudeModelsError
       : selectedNativeHarness === "codex-native"
         ? hostCodexModelsError
-        : null;
+        : agyModelPicker
+          ? hostAgyModelsError
+          : null;
   useEffect(() => setPickerModelSearch(""), [selectedNativeHarness]);
   const pickerEffortOptions = supportsPermissionMode
     ? CLAUDE_NATIVE_EFFORTS
@@ -3370,7 +3406,17 @@ export function NewChatLandingScreen() {
     setPickedEffort(picked);
     writeHarnessOption(selectedNativeHarness, { effort: picked });
   };
-  const selectedConfigContent = selectedAgentHasKnobs ? (
+  const selectedGuide = agentGuide(selectedAgent?.name);
+  const aboutAgentItem = selectedGuide ? (
+    <DropdownMenuItem
+      data-testid="new-chat-landing-agent-about"
+      onSelect={() => setAboutOpen(true)}
+    >
+      <InfoIcon className="size-3.5" aria-hidden="true" />
+      About
+    </DropdownMenuItem>
+  ) : null;
+  const selectedKnobsContent = selectedAgentHasKnobs ? (
     <>
       {smartRoutingEligible && (
         <>
@@ -3388,7 +3434,8 @@ export function NewChatLandingScreen() {
       )}
       {(supportsModelPicker ||
         supportsPermissionMode ||
-        selectedNativeHarness === "codex-native") && (
+        selectedNativeHarness === "codex-native" ||
+        agyModelPicker) && (
         <div data-testid="new-chat-landing-agent-models">
           <PickerSectionHeader>Models</PickerSectionHeader>
           {selectedNativeHarness === "pi-native" && (
@@ -3480,14 +3527,19 @@ export function NewChatLandingScreen() {
         </div>
       )}
       <DropdownMenuSeparator />
-      <DropdownMenuItem
-        data-testid="new-chat-landing-config-gear"
-        onSelect={() => setConfigOpen(true)}
-      >
-        Advanced settings
-      </DropdownMenuItem>
+      <div className="flex items-center gap-1">
+        <DropdownMenuItem
+          className="flex-1"
+          data-testid="new-chat-landing-config-gear"
+          onSelect={() => setConfigOpen(true)}
+        >
+          Advanced settings
+        </DropdownMenuItem>
+        {aboutAgentItem}
+      </div>
     </>
   ) : null;
+  const selectedConfigContent = selectedKnobsContent ?? aboutAgentItem;
   const pickerEntrySummaries = Object.fromEntries(
     [...harnessEntries, ...agentEntries].map((agent) => {
       const native = nativeCodingAgentForAvailableAgent(agent);
@@ -3504,7 +3556,9 @@ export function NewChatLandingScreen() {
             ? codexModelOptions
             : native.iconKind === "pi"
               ? piModelOptions
-              : [];
+              : native.harness === "antigravity-native"
+                ? agyModelOptions
+                : [];
       const model = catalog.find((option) => option.id === saved.model);
       const label = visibleModelLabel(model ? nativeModelLabel(model) : defaultModelLabel(catalog));
       const efforts = native.iconKind === "pi" ? PI_NATIVE_EFFORTS : CLAUDE_NATIVE_EFFORTS;
@@ -3584,7 +3638,9 @@ export function NewChatLandingScreen() {
         ? claudeModelOptions
         : selectedNativeHarness === "codex-native"
           ? codexModelOptions
-          : [];
+          : agyModelPicker
+            ? agyModelOptions
+            : [];
   const projectDefaultModelValid =
     projectDefaultModel != null && projectModelVocab.some((m) => m.id === projectDefaultModel)
       ? projectDefaultModel
@@ -3696,6 +3752,13 @@ export function NewChatLandingScreen() {
       setCursorExecMode(resolve(CURSOR_NATIVE_EXEC_MODES, CURSOR_NATIVE_DEFAULT_EXEC_MODE));
     } else if (supportsAgySkipPermissions) {
       setAgySkipMode(resolve(AGY_NATIVE_SKIP_MODES, AGY_NATIVE_DEFAULT_SKIP_MODE));
+      setPickedModel(
+        projectSeed(agyModelOptions) ??
+          (stored.model != null && agyModelOptions.some((m) => m.id === stored.model)
+            ? stored.model
+            : ""),
+      );
+      setPickedEffort("");
     }
     // Reseed on harness changes, when the selected host's catalog resolves,
     // and when the project's configured default model settles (its config
@@ -3707,6 +3770,7 @@ export function NewChatLandingScreen() {
     claudeModelOptions,
     codexModelOptions,
     piModelOptions,
+    agyModelOptions,
     projectDefaultModel,
   ]);
   // Smart Routing is remembered per harness alongside the mode/model
@@ -4834,7 +4898,9 @@ export function NewChatLandingScreen() {
             model_override:
               !smartRoutingHarnessSelected &&
               !routingOwnsModel &&
-              (agentSupportsModelPicker || nativeAgent?.harness === "codex-native") &&
+              (agentSupportsModelPicker ||
+                nativeAgent?.harness === "codex-native" ||
+                nativeAgent?.harness === "antigravity-native") &&
               pickedModel
                 ? pickedModel
                 : undefined,
@@ -4921,7 +4987,10 @@ export function NewChatLandingScreen() {
           supportsApprovalMode: agentSupportsApprovalMode,
           supportsCursorMode: agentSupportsCursorMode,
           supportsAgySkipPermissions: agentSupportsAgySkip,
-          supportsModelPicker: agentSupportsModelPicker || nativeAgent?.harness === "codex-native",
+          supportsModelPicker:
+            agentSupportsModelPicker ||
+            nativeAgent?.harness === "codex-native" ||
+            nativeAgent?.harness === "antigravity-native",
           supportsEffortPicker:
             selectedNativeHarness === "pi-native" || selectedNativeHarness === "codex-native",
           permissionMode,
@@ -6058,6 +6127,17 @@ export function NewChatLandingScreen() {
                         triggerClassName="text-[13px] leading-5"
                       />
                     </div>
+                    {selectedAgent && selectedGuide && (
+                      <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
+                        <DialogContent data-testid="agent-about-dialog" className="sm:max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>{selectedAgent.display_name}</DialogTitle>
+                            <DialogDescription>{selectedGuide.summary}</DialogDescription>
+                          </DialogHeader>
+                          <AgentGuideSection guide={selectedGuide} />
+                        </DialogContent>
+                      </Dialog>
+                    )}
                     {selectedAgent && selectedAgentHasKnobs && (
                       <HarnessConfigModal
                         open={configOpen}

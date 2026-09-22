@@ -67,8 +67,10 @@ from omnigent.entities.session_resources import terminal_resource_id
 from omnigent.harnesses.antigravity_native.bridge import (
     ANTIGRAVITY_NATIVE_BRIDGE_ID_LABEL_KEY,
     AntigravityNativeBridgeState,
+    agy_gemini_dir,
     is_placeholder_conversation_id,
     read_bridge_state,
+    update_conversation_id,
     write_bridge_state,
 )
 from omnigent.harnesses.antigravity_native.rpc import (
@@ -769,8 +771,37 @@ def _resolve_cascade_id(bridge_dir: Path) -> str | None:
     if state is None:
         return None
     if is_placeholder_conversation_id(state.conversation_id):
-        return None
+        return _adopt_local_conversation_id(bridge_dir, state.active_turn_id)
     return state.conversation_id
+
+
+def _adopt_local_conversation_id(bridge_dir: Path, active_turn_id: str | None) -> str | None:
+    """
+    Adopt the newest conversation in this session's isolated Gemini dir.
+
+    Recovers a slow cold-start that left the placeholder: the ``--gemini_dir`` is
+    per-session, so any conversation stored there belongs to this session's agy.
+
+    :param bridge_dir: Native Antigravity bridge directory.
+    :param active_turn_id: The in-flight turn id to keep in bridge state.
+    :returns: The adopted conversation id, or ``None`` when agy has not created one yet.
+    """
+    conversations = agy_gemini_dir(bridge_dir) / "antigravity-cli" / "conversations"
+    try:
+        dbs = [(db.stat().st_mtime, db.stem) for db in conversations.glob("*.db")]
+    except OSError:
+        return None
+    if not dbs:
+        return None
+    conversation_id = max(dbs)[1]
+    if not update_conversation_id(bridge_dir, conversation_id, active_turn_id):
+        return None
+    _logger.info(
+        "agy RPC reader adopted local conversation %s in place of the placeholder: bridge_dir=%s",
+        conversation_id,
+        bridge_dir,
+    )
+    return conversation_id
 
 
 def _resolve_rpc_port(cascade_id: str) -> int | None:

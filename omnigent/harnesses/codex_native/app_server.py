@@ -218,7 +218,16 @@ def _remove_toml_table(text: str, table_name: str) -> str:
 #: Omnigent tools the framework calls on every session's behalf, pre-approved
 #: so codex never raises an interactive prompt for them. The rename keeps a
 #: session's title current, which the framework does unprompted on any session.
-_FRAMEWORK_APPROVED_TOOLS: tuple[str, ...] = ("sys_session_rename",)
+#: The project context readers are read-only and owner-scoped server-side, so a
+#: prompt for them would only add friction (designs/PROJECT_CONTEXT.md §4.3).
+_FRAMEWORK_APPROVED_TOOLS: tuple[str, ...] = (
+    "sys_session_rename",
+    "context_list",
+    "context_read",
+    "context_search",
+    "graph_query",
+    "graph_neighbors",
+)
 
 #: Additionally pre-approved for an auto-harness Smart Routing session, whose
 #: spawns the router may move onto the counterpart harness family: these four

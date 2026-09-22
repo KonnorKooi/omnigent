@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { AgentGuide } from "@/lib/agentGuides";
 import { cn } from "@/lib/utils";
 
 export const HARNESS_MENU_CLASS_NAME =
@@ -12,6 +13,22 @@ export const HARNESS_MENU_ROW_CLASS_NAME =
 export function PickerSectionHeader({ children }: { children: ReactNode }) {
   return (
     <div className="px-2 py-1 text-xs leading-5 font-normal text-muted-foreground">{children}</div>
+  );
+}
+
+/** "When / how" usage guide shown in an agent's About dialog. */
+export function AgentGuideSection({ guide }: { guide: AgentGuide }) {
+  return (
+    <div data-testid="agent-guide" className="flex flex-col gap-2 text-sm text-muted-foreground">
+      <p>
+        <span className="font-medium text-foreground">When: </span>
+        {guide.when}
+      </p>
+      <p>
+        <span className="font-medium text-foreground">How: </span>
+        {guide.how}
+      </p>
+    </div>
   );
 }
 

@@ -372,6 +372,12 @@ async def test_terminal_launch_with_bridge_inject_advertises_comment_tools(
     assert set(tools_by_name) == {
         "list_comments",
         "update_comment",
+        # Read-only project context tools (designs/PROJECT_CONTEXT.md §4.3).
+        "context_list",
+        "context_read",
+        "context_search",
+        "graph_query",
+        "graph_neighbors",
         "sys_session_list",
         "sys_session_get_history",
         "sys_session_get_info",

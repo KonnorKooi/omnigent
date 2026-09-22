@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -63,7 +64,15 @@ function renderDialog(projectId: string | null = "p_1") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ProjectSettingsDialog open onOpenChange={vi.fn()} projectId={projectId} projectName="Work" />
+      {/* The dialog links to the project Context page, so it needs a router. */}
+      <MemoryRouter>
+        <ProjectSettingsDialog
+          open
+          onOpenChange={vi.fn()}
+          projectId={projectId}
+          projectName="Work"
+        />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -415,5 +424,15 @@ describe("ProjectSettingsDialog", () => {
     await waitFor(() =>
       expect(updateMock).toHaveBeenCalledWith("p_1", { agent_id: "ag_claude", model: "opus" }),
     );
+  });
+
+  it("links to the project Context page for a first-class project only", async () => {
+    getProjectMock.mockResolvedValue({ id: "p_1", name: "Work", config: {} });
+    renderDialog();
+    const link = await screen.findByTestId("project-settings-context-link");
+    expect(link.getAttribute("href")).toBe("/projects/p_1/context");
+    cleanup();
+    renderDialog(null);
+    expect(screen.queryByTestId("project-settings-context-link")).toBeNull();
   });
 });

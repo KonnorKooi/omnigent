@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
+from omnigent.context import validate_project_config_context
 from omnigent.entities import Project
 from omnigent.errors import ErrorCode, OmnigentError
 from omnigent.server.auth import AuthProvider
@@ -75,6 +76,9 @@ def create_projects_router(
             if the caller already has a project with this name.
         """
         user_id = require_user(request, auth_provider)
+        # The config is opaque except for the ``context`` block, whose paths
+        # the server acts on; reject a malformed one when it is saved.
+        validate_project_config_context(body.config)
         project = await asyncio.to_thread(
             project_store.create,
             uuid.uuid4().hex,
@@ -132,6 +136,7 @@ def create_projects_router(
             projects.
         """
         user_id = require_user(request, auth_provider)
+        validate_project_config_context(body.config)
         project = await asyncio.to_thread(
             project_store.update,
             project_id,

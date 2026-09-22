@@ -158,6 +158,9 @@ class ToolManager:
         self._register_builtin_tools()
         self._register_sub_agent_tools()
         self._register_session_tools()
+        # Project context readers are framework-owned and always present; they
+        # answer with a plain notice when the session has no project context.
+        self._register_project_context_tools()
         self._register_agent_mgmt_tools()
         self._register_os_env_tools()
         self._register_terminal_tools()
@@ -500,6 +503,21 @@ class ToolManager:
     def _register_session_tools(self) -> None:
         """Register framework-owned tools for the current session."""
         self._tools[SysSessionRenameTool.name()] = SysSessionRenameTool()
+
+    def _register_project_context_tools(self) -> None:
+        """
+        Register the read-only project context tools.
+
+        ``context_list``, ``context_read``, ``context_search``, ``graph_query``
+        and ``graph_neighbors`` are schema-only; the runner dispatches them to
+        the session-scoped ``/v1/sessions/{id}/context`` routes, which enforce
+        that only the project owner's sessions see the context
+        (``designs/PROJECT_CONTEXT.md`` §4.3).
+        """
+        from omnigent.tools.builtins.project_context import PROJECT_CONTEXT_TOOL_CLASSES
+
+        for tool_cls in PROJECT_CONTEXT_TOOL_CLASSES:
+            self._tools[tool_cls.name()] = tool_cls()
 
     def _register_agent_mgmt_tools(self) -> None:
         """

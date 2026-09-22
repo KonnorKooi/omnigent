@@ -75,6 +75,8 @@ from omnigent.host.frames import (
     HostListDirResultFrame,
     HostListWorktreesFrame,
     HostListWorktreesResultFrame,
+    HostMcpConfigFrame,
+    HostMcpConfigResultFrame,
     HostModelOptionsFrame,
     HostModelOptionsResultFrame,
     HostRemoveWorktreeFrame,
@@ -2911,6 +2913,72 @@ class HostProcess:
         routable = list(config.routable_models) if config is not None else []
         return ModelOptionsResult(models=rows, routable_models=routable)
 
+    async def _handle_mcp_config(
+        self,
+        frame: HostMcpConfigFrame,
+    ) -> HostMcpConfigResultFrame:
+        """Run one MCP config operation on this machine.
+
+        An MCP server is only usable where the harness CLI runs, so the
+        server proxies every Settings → MCP Servers operation here rather
+        than touching its own config. Failures carry the status the
+        operation deserves so the route can pass it through instead of
+        flattening everything into a 500.
+        """
+        from omnigent.harness_mcp_config import (
+            HarnessMcpError,
+            add_server,
+            list_servers,
+            probe_server,
+            remove_server,
+            update_server,
+        )
+
+        try:
+            if frame.op == "list":
+                # A read of two small config files — cheap, but off the loop
+                # anyway since it touches the filesystem.
+                payload = await asyncio.to_thread(list_servers, frame.harness)
+            elif frame.op == "add":
+                if not frame.harness or not frame.name:
+                    raise HarnessMcpError(400, "invalid_spec", "add requires a harness and a name")
+                payload = await add_server(frame.harness, frame.name, frame.spec or {})
+            elif frame.op == "update":
+                if not frame.harness or not frame.name:
+                    raise HarnessMcpError(
+                        400, "invalid_spec", "update requires a harness and a name"
+                    )
+                payload = await update_server(frame.harness, frame.name, frame.spec or {})
+            elif frame.op == "remove":
+                if not frame.harness or not frame.name:
+                    raise HarnessMcpError(
+                        400, "invalid_spec", "remove requires a harness and a name"
+                    )
+                payload = await remove_server(frame.harness, frame.name)
+            elif frame.op == "probe":
+                if not frame.harness or not frame.name:
+                    raise HarnessMcpError(
+                        400, "invalid_spec", "probe requires a harness and a name"
+                    )
+                payload = await probe_server(frame.harness, frame.name)
+            else:
+                raise HarnessMcpError(
+                    400, "unsupported_op", f"unsupported MCP config op {frame.op!r}"
+                )
+        except HarnessMcpError as exc:
+            return HostMcpConfigResultFrame(
+                request_id=frame.request_id,
+                status="error",
+                error_status=exc.status,
+                error_code=exc.code,
+                error=exc.message,
+            )
+        return HostMcpConfigResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            payload=payload,
+        )
+
     async def _handle_model_options(
         self,
         frame: HostModelOptionsFrame,
@@ -2960,6 +3028,27 @@ class HostProcess:
                 request_id=frame.request_id,
                 status="ok",
                 models=with_source(pi_models),
+            )
+
+        if harness == "antigravity-native":
+            # agy lists exactly the models the signed-in Google account may use.
+            try:
+                from omnigent.harnesses.antigravity_native.launch import (
+                    list_agy_cli_model_options,
+                )
+
+                agy_models = await asyncio.to_thread(list_agy_cli_model_options)
+            except Exception:
+                _logger.exception("Failed to resolve pre-launch Antigravity model options")
+                return HostModelOptionsResultFrame(
+                    request_id=frame.request_id,
+                    status="failed",
+                    error="failed to list Antigravity models (is agy installed and signed in?)",
+                )
+            return HostModelOptionsResultFrame(
+                request_id=frame.request_id,
+                status="ok",
+                models=with_source(agy_models),
             )
 
         if is_claude_sdk_harness_name(harness):
@@ -4228,6 +4317,23 @@ class HostProcess:
             # gh/git writes can block; run off the event loop and reply back.
             fs_write_result = await asyncio.to_thread(self._handle_fs_write, frame)
             await ws.send(encode_host_frame(fs_write_result))
+        elif isinstance(frame, HostMcpConfigFrame):
+            # Spawning an MCP server (probe) or shelling out to a harness CLI
+            # can block; each dispatched frame already runs on its own task,
+            # and a crash becomes an honest error frame so the server's
+            # request future settles instead of timing out.
+            try:
+                mcp_result = await self._handle_mcp_config(frame)
+            except Exception:
+                _logger.exception("MCP config op %r crashed", frame.op)
+                mcp_result = HostMcpConfigResultFrame(
+                    request_id=frame.request_id,
+                    status="error",
+                    error_status=500,
+                    error_code="host_error",
+                    error=f"the MCP config operation {frame.op!r} crashed on the host",
+                )
+            await ws.send(encode_host_frame(mcp_result))
         elif isinstance(frame, HostModelOptionsFrame):
             # Every dispatched frame already runs on its own task (see
             # _start_frame_task), so a cold harness probe here cannot stall

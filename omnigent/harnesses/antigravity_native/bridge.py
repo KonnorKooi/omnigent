@@ -318,6 +318,11 @@ _MCP_SERVER_NAME = "omnigent"
 # side, so auto-approving the agy-side MCP gate only avoids a hidden in-terminal
 # prompt blocking the call before Omnigent ever sees it.
 _AGY_ENABLED_TOOLS = [
+    "context_list",
+    "context_read",
+    "context_search",
+    "graph_neighbors",
+    "graph_query",
     "list_comments",
     "sys_add_policy",
     "sys_agent_download",
@@ -707,6 +712,40 @@ def _link_into_isolated_gemini_dir(real: Path, link: Path) -> None:
         if not link.exists():
             link.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             link.symlink_to(real.resolve(), target_is_directory=True)
+
+
+# agy loads ``<gemini_dir>/GEMINI.md`` as its global rules at session start.
+_AGY_GLOBAL_RULES_FILE = "GEMINI.md"
+
+
+def write_agy_global_rules(bridge_dir: Path, project_context: str | None) -> Path | None:
+    """Write the isolated ``GEMINI.md`` agy loads as its global rules.
+
+    ``--gemini_dir`` hides the user's real ``~/.gemini/GEMINI.md``, so its text is
+    carried over first, followed by the session's project context. With neither,
+    any file left by a prior launch of this bridge is removed.
+
+    :param bridge_dir: Native Antigravity bridge directory.
+    :param project_context: Injected project context text, or ``None``.
+    :returns: The written path, or ``None`` when no rules apply.
+    """
+    target = agy_gemini_dir(bridge_dir) / _AGY_GLOBAL_RULES_FILE
+    parts: list[str] = []
+    real_rules = Path.home() / ".gemini" / _AGY_GLOBAL_RULES_FILE
+    with contextlib.suppress(OSError, UnicodeDecodeError):
+        if real_rules.is_file():
+            parts.append(real_rules.read_text(encoding="utf-8").strip())
+    if project_context and project_context.strip():
+        parts.append(project_context.strip())
+    parts = [p for p in parts if p]
+    if not parts:
+        with contextlib.suppress(OSError):
+            target.unlink(missing_ok=True)
+        return None
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+    os.chmod(target, 0o600)
+    return target
 
 
 # agy's periodic engagement survey ("How's the CLI experience so far?") is gated by

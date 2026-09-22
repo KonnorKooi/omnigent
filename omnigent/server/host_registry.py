@@ -257,6 +257,8 @@ class HostConnection:
         Resolved when the host sends ``host.fs_result``. Values
         carry ``status``, ``payload``, ``error_status``,
         ``error_code``, and ``error``.
+    :param pending_mcp_config: Per-``request_id`` futures for MCP config
+        operations proxied to this host (Settings → MCP Servers).
     :param pending_model_options: Per-``request_id`` futures for pre-launch
         model catalogs resolved by the selected host.
     """
@@ -313,6 +315,9 @@ class HostConnection:
         default_factory=dict,
     )
     pending_model_options: dict[str, asyncio.Future[dict[str, Any]]] = field(
+        default_factory=dict,
+    )
+    pending_mcp_config: dict[str, asyncio.Future[dict[str, Any]]] = field(
         default_factory=dict,
     )
     # Import streams one session per frame, so the tunnel pushes each onto a

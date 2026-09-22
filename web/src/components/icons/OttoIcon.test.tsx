@@ -5,34 +5,32 @@ import { OttoIcon } from "./OttoIcon";
 afterEach(cleanup);
 
 describe("OttoIcon", () => {
-  it("exposes four otto-eye groups for the blink animation", () => {
+  it("exposes two otto-eye groups for the blink animation", () => {
     const { container } = render(<OttoIcon />);
     // The blink keyframes target `.otto-working .otto-eye` in index.css; CSS
     // selectors fail silently, so renaming/flattening these groups would
     // freeze the eyes with no other signal.
     const eyes = container.querySelectorAll("svg > g.otto-eye");
-    // 4 = Otto's two eyes + the buddy starfish's two; dropping the buddy's
-    // groups would leave it staring unblinking next to a blinking Otto.
-    expect(eyes).toHaveLength(4);
-    // 3 paths per eye = sclera + pupil + highlight; losing one shifts the
-    // group's fill-box bounds and the blink no longer collapses on center.
+    // 2 = Otto's eye + the joey's (both drawn in profile).
+    expect(eyes).toHaveLength(2);
+    // 2 rects per eye = white + pupil; losing one shifts the group's fill-box
+    // bounds and the blink no longer collapses on center.
     for (const eye of eyes) {
-      expect(eye.querySelectorAll("path")).toHaveLength(3);
+      expect(eye.querySelectorAll("rect")).toHaveLength(2);
     }
   });
 
-  it("wraps only Otto's two pupils in otto-pupil groups for cursor tracking", () => {
+  it("wraps every pupil in an otto-pupil group for cursor tracking", () => {
     const { container } = render(<OttoIcon />);
-    // OttoEyes finds these groups by class through the forwarded ref;
-    // querySelectorAll fails silently, so renaming the class (or adding
-    // groups to the buddy's eyes) would break or skew tracking with no
-    // other signal. 2 = Otto's eyes only — the buddy stays still.
+    // OttoEyes finds these groups by class through the forwarded ref and pairs
+    // them with EYE_CENTERS by index; querySelectorAll fails silently, so a
+    // rename or count change would break or skew tracking.
     const pupils = container.querySelectorAll("svg g.otto-eye > g.otto-pupil");
     expect(pupils).toHaveLength(2);
-    // 2 paths per group = black disc + glint. The sclera must stay outside
-    // the group, or it would slide along with the pupil instead of framing it.
+    // The white must stay outside the group, or it would slide along with the
+    // pupil instead of framing it.
     for (const pupil of pupils) {
-      expect(pupil.querySelectorAll("path")).toHaveLength(2);
+      expect(pupil.querySelectorAll("rect")).toHaveLength(1);
     }
   });
 
@@ -43,7 +41,7 @@ describe("OttoIcon", () => {
     expect(svg).toHaveClass("otto-working");
     // The art's coordinate space; consumers size via className so a viewBox
     // change silently distorts the mascot everywhere.
-    expect(svg).toHaveAttribute("viewBox", "0 0 1024 1024");
+    expect(svg).toHaveAttribute("viewBox", "0 0 48 48");
     // Decorative by default; the pin's aria-live region must only
     // ever announce the "Working…" text.
     expect(svg).toHaveAttribute("aria-hidden", "true");
