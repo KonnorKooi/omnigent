@@ -47,6 +47,7 @@ from omnigent.models.codex_model_vocabulary import (
 from omnigent.models.model_fallbacks import CODEX_CATALOG_CLONE_SOURCE_SLUG, CODEX_DEFAULT_MODEL
 from omnigent.native import _native_forwarder_health as native_forwarder_health
 from omnigent.spec.types import RetryPolicy
+from omnigent.usage_limits import PROVIDER_CODEX, provider_report, windows_from_codex_rate_limits
 from omnigent.util.reasoning_effort import CODEX_EFFORTS, EFFORT_ALIASES, validate_effort
 
 from . import _proc
@@ -2317,6 +2318,8 @@ class _CodexAppServerSession:
         # on the next ``turn/completed`` so each TurnComplete carries the
         # usage for the turn that just finished.
         self._last_turn_usage: dict[str, object] | None = None
+        # Latest ``account/rateLimits/updated`` report, attached to each turn's usage.
+        self._last_rate_limits: dict[str, object] | None = None
         # Serialize concurrent writes to the subprocess stdin so that parallel
         # tool-call responses don't interleave bytes on the pipe.
         self._stdin_lock = asyncio.Lock()
@@ -3013,7 +3016,7 @@ class _CodexAppServerSession:
                                 active_turn_id,
                                 final_response[:120],
                             )
-                            turn_usage = self._last_turn_usage
+                            turn_usage = self._with_rate_limits(self._last_turn_usage)
                             self._last_turn_usage = None
                             _notify_usage_from_dict(model=model, usage=turn_usage)
                             yield TurnComplete(response=final_response, usage=turn_usage)
@@ -3028,6 +3031,13 @@ class _CodexAppServerSession:
 
                 if method == "thread/tokenUsage/updated":
                     self._last_turn_usage = _extract_codex_last_turn_usage(params, model)
+                    continue
+
+                if method == "account/rateLimits/updated":
+                    self._last_rate_limits = provider_report(
+                        PROVIDER_CODEX,
+                        windows_from_codex_rate_limits(params.get("rateLimits")),
+                    )
                     continue
 
                 if method == "turn/completed":
@@ -3054,7 +3064,7 @@ class _CodexAppServerSession:
                             message_buffers=message_buffers,
                             final_response=final_response,
                         )
-                    turn_usage = self._last_turn_usage
+                    turn_usage = self._with_rate_limits(self._last_turn_usage)
                     self._last_turn_usage = None
                     _notify_usage_from_dict(model=model, usage=turn_usage)
                     yield TurnComplete(response=final_response, usage=turn_usage)
@@ -3166,6 +3176,12 @@ class _CodexAppServerSession:
             return {"result": resolved}
         except Exception as exc:  # noqa: BLE001 — tool errors are surfaced to Codex via the JSON response envelope
             return {"error": str(exc)}
+
+    def _with_rate_limits(self, usage: dict[str, object] | None) -> dict[str, object] | None:
+        """Attach the latest plan-quota report to a turn's usage dict."""
+        if usage is None or self._last_rate_limits is None:
+            return usage
+        return {**usage, "rate_limits": [self._last_rate_limits]}
 
     async def _request(self, method: str, params: CodexParams) -> CodexMessage:
         request_id = self._next_id

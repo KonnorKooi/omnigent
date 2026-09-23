@@ -56,6 +56,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -101,6 +102,11 @@ from omnigent.harnesses.antigravity_native.steps import (
 from omnigent.harnesses.claude_native.bridge import url_component
 from omnigent.native._native_post_delivery import post_session_event_with_retry
 from omnigent.server.schemas import ElicitationRequestParams, ElicitationResult
+from omnigent.usage_limits import (
+    PROVIDER_ANTIGRAVITY,
+    provider_report,
+    windows_from_antigravity_catalog,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -229,6 +235,8 @@ _StepKey = tuple[str | None, int | None, str | None]
 
 # Telemetry event types (design §10.3 + §10.4).
 _EXTERNAL_SESSION_USAGE = "external_session_usage"
+# Minimum seconds between quota-driven ``GetAvailableModels`` refreshes.
+_QUOTA_REFRESH_S = 30.0
 _EXTERNAL_MODEL_CHANGE = "external_model_change"
 
 # Event that WITHDRAWS a surfaced elicitation whose WAITING step left WAITING
@@ -1320,6 +1328,8 @@ class _ReaderState:
     turn_active: bool = False
     posted_model_enum: str | None = None
     model_catalog: dict[str, object] | None = None
+    # Monotonic time of the last quota-driven catalog refresh.
+    quota_fetched_at: float = float("-inf")
     port: int = 0
     cumulative_input_tokens: int = 0
     cumulative_output_tokens: int = 0
@@ -2691,6 +2701,10 @@ async def _maybe_emit_session_usage(
         payload["cumulative_cache_read_input_tokens"] = state.cumulative_cache_read_input_tokens
     if display_name is not None:
         payload["model"] = display_name
+    if isinstance(model_enum, str) and model_enum:
+        limits_report = await _quota_report(state, model_enum)
+        if limits_report is not None:
+            payload["rate_limits"] = [limits_report]
     if not payload:
         return
     step_idx = _step_index(step) or 0
@@ -2748,6 +2762,27 @@ async def _maybe_emit_model_change(
         ),
     )
     state.posted_model_enum = model_enum
+
+
+async def _quota_report(state: _ReaderState, model_enum: str) -> dict[str, object] | None:
+    """
+    Re-read the catalog (throttled) and report *model_enum*'s plan quota.
+
+    The quota in ``GetAvailableModels`` moves as turns run, so unlike the
+    display-name lookup this refetches, at most once per
+    :data:`_QUOTA_REFRESH_S`. Failures fall back to no report.
+    """
+    now = time.monotonic()
+    if now - state.quota_fetched_at >= _QUOTA_REFRESH_S:
+        state.quota_fetched_at = now
+        try:
+            state.model_catalog = await asyncio.to_thread(get_available_models, state.port)
+        except Exception:
+            _logger.debug("agy RPC reader: quota refresh failed", exc_info=True)
+    return provider_report(
+        PROVIDER_ANTIGRAVITY,
+        windows_from_antigravity_catalog(state.model_catalog, model_enum),
+    )
 
 
 async def _ensure_catalog(state: _ReaderState) -> dict[str, object]:

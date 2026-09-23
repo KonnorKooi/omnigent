@@ -2219,3 +2219,28 @@ def test_pid_listen_ports_empty_when_neither_source_attributes(
     monkeypatch.setattr(rpc.psutil, "Process", _Proc)
     monkeypatch.setattr(rpc, "_run_lsof_listen_ports", lambda _pid: "")
     assert rpc._pid_listen_ports(72753) == []
+
+
+def test_rpc_calls_carry_csrf_token_matching_launch_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import omnigent.harnesses.antigravity_native.bridge as bridge
+
+    monkeypatch.setattr(bridge, "_BRIDGE_ROOT", tmp_path)
+    monkeypatch.setattr(rpc, "_csrf_token_cache", None)
+    seen: list[str | None] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("x-codeium-csrf-token"))
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(rpc, "_HTTP_TRANSPORT", httpx.MockTransport(_handler))
+    assert rpc._heartbeat_ok(52548)
+
+    token = (tmp_path / ".csrf_token").read_text(encoding="utf-8")
+    assert token and seen == [token]
+    assert rpc.agy_csrf_flag() == f"--csrf_token={token}"
+    assert (tmp_path / ".csrf_token").stat().st_mode & 0o777 == 0o600
+    # A fresh process reads the persisted token instead of minting a new one.
+    monkeypatch.setattr(rpc, "_csrf_token_cache", None)
+    assert rpc.agy_csrf_token() == token

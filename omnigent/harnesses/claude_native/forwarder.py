@@ -57,6 +57,11 @@ from omnigent.session_event_batch import (
     MAX_SESSION_EVENT_BATCH_EVENTS,
     encode_session_event_batch,
 )
+from omnigent.usage_limits import (
+    PROVIDER_CLAUDE,
+    provider_report,
+    windows_from_claude_status_line,
+)
 from omnigent.util.reasoning_effort import CLAUDE_EFFORTS, EFFORT_CLEAR_VALUES
 
 _FORWARDER_STATE_FILE = "transcript_forwarder.json"
@@ -738,6 +743,8 @@ class _ForwardDedupeState:
     # sub-agent spend so the gate can block mid-turn. Separate baseline
     # because it can advance while ``posted_cost`` (S) is frozen.
     posted_policy_cost: float | None = None
+    # Last subscription-limit report POSTed, to skip unchanged statusLine renders.
+    posted_rate_limits: list[dict[str, object]] | None = None
     # Last permission mode POSTed as ``external_permission_mode_change`` —
     # mirrors the launch mode and any in-pane shift+tab switch, neither of
     # which the web UI can observe on its own.
@@ -4457,6 +4464,27 @@ async def _forward_available_items(
                 session_id,
                 _http_status_for_log(exc),
                 exc_info=True,
+                extra={"session_id": session_id},
+            )
+    limits_report = provider_report(
+        PROVIDER_CLAUDE,
+        windows_from_claude_status_line(
+            status_state.get("rate_limits") if status_state is not None else None
+        ),
+    )
+    if limits_report is not None and [limits_report] != dedupe.posted_rate_limits:
+        try:
+            resp = await client.post(
+                f"/v1/sessions/{session_id}/events",
+                json={"type": "external_session_usage", "data": {"rate_limits": [limits_report]}},
+            )
+            resp.raise_for_status()
+            dedupe.posted_rate_limits = [limits_report]
+        except httpx.HTTPError as exc:
+            _logger.warning(
+                "Failed to forward Claude usage limits; session=%s http_status=%s",
+                session_id,
+                _http_status_for_log(exc),
                 extra={"session_id": session_id},
             )
     # Report the transcript's model verbatim. This transcript-derived

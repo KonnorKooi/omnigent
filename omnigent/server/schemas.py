@@ -894,6 +894,9 @@ class Usage(BaseModel):
         it in preference to the catalog token-price estimate; ``None``
         when the harness doesn't report a cost (the common case, where
         cost is computed from token counts x catalog pricing).
+    :param rate_limits: Subscription quota windows the harness observed this
+        turn (see :mod:`omnigent.usage_limits`), e.g. ``[{"provider":
+        "claude", "windows": [...]}]``. ``None`` when not reported.
     """
 
     input_tokens: int = 0
@@ -905,6 +908,7 @@ class Usage(BaseModel):
     cache_creation_input_tokens: int = 0
     model: str | None = None
     cost_usd: float | None = None
+    rate_limits: list[dict[str, Any]] | None = None
 
 
 class ErrorDetail(BaseModel):
@@ -2905,6 +2909,47 @@ class UsageReport(BaseModel):
 
 
 # ── Permissions ────────────────────────────────────────────────────
+
+
+class UsageLimitWindow(BaseModel):
+    """
+    One subscription quota window, e.g. Claude's rolling 5-hour limit.
+
+    :param id: Provider window id, e.g. ``"five_hour"`` or ``"primary"``.
+    :param label: Short display label, e.g. ``"5h"`` or ``"wk"``.
+    :param used_percent: Percent of the window consumed (0-100), or ``None``
+        when the window has reset since the last reading.
+    :param resets_at: Unix seconds when the window resets, if known.
+    """
+
+    id: str
+    label: str
+    used_percent: float | None = None
+    resets_at: int | None = None
+
+
+class UsageLimitProvider(BaseModel):
+    """
+    Latest quota windows one provider reported for the caller.
+
+    :param provider: ``"claude"``, ``"codex"`` or ``"antigravity"``.
+    :param windows: The provider's windows in report order.
+    :param updated_at: Unix seconds of the most recent report.
+    """
+
+    provider: str
+    windows: list[UsageLimitWindow]
+    updated_at: int
+
+
+class UsageLimitsReport(BaseModel):
+    """
+    Subscription usage limits observed passively from harness turns.
+
+    :param providers: Providers with at least one report, in display order.
+    """
+
+    providers: list[UsageLimitProvider]
 
 
 class GrantPermissionRequest(BaseModel):

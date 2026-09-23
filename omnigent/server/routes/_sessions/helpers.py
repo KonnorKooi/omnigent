@@ -94,6 +94,7 @@ from omnigent.server._elicitation_registry import (
 from omnigent.server.auth import (
     LEVEL_OWNER,
     LEVEL_READ,
+    RESERVED_USER_LOCAL,
     RESERVED_USER_PUBLIC,
 )
 from omnigent.server.host_registry import HostConnection, HostRegistry, RunnerExitReports
@@ -286,6 +287,7 @@ from omnigent.stores.conversation_store import (
 )
 from omnigent.stores.host_store import Host, HostStore
 from omnigent.stores.permission_store import PermissionStore
+from omnigent.usage_limits import USAGE_LIMITS_CACHE
 from omnigent.util.cost_plan import (
     COST_CONTROL_LABEL_NAMESPACE,
     reserved_cost_control_keys,
@@ -2098,6 +2100,31 @@ def _record_daily_cost(
     from omnigent.db.utils import now_epoch
 
     conversation_store.add_daily_cost(owner, _utc_day(now_epoch()), delta_usd)
+
+
+def _record_usage_limits(
+    conv: Conversation | None,
+    reports: object,
+    conversation_store: ConversationStore,
+) -> None:
+    """
+    Cache harness-reported subscription quota windows for the session owner.
+
+    Owner resolution mirrors :func:`_record_daily_cost` (sub-agents fall back to
+    the root's owner); single-user mode has no grants and keys by the reserved
+    local user that ``GET /v1/usage/limits`` reads.
+
+    :param conv: The session's conversation row (``None`` is a no-op).
+    :param reports: ``usage.rate_limits`` — a list of provider reports.
+    :param conversation_store: Store for the owner lookup.
+    """
+    if conv is None or not isinstance(reports, list) or not reports:
+        return
+    owner = conversation_store.get_session_owner(conv.id)
+    if owner is None and conv.root_conversation_id != conv.id:
+        owner = conversation_store.get_session_owner(conv.root_conversation_id)
+    for report in reports:
+        USAGE_LIMITS_CACHE.record(owner or RESERVED_USER_LOCAL, report)
 
 
 def _priced_cost_for_display(usage: dict[str, Any]) -> float | None:
@@ -10885,6 +10912,7 @@ __all__ = [
     "_read_state_entry",
     "_read_upload_capped",
     "_record_daily_cost",
+    "_record_usage_limits",
     "_registered_runner_id",
     "_reject_reserved_cost_control_label_seed",
     "_reject_server_reserved_label_seed",

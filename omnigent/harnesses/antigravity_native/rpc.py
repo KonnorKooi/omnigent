@@ -58,6 +58,7 @@ import ipaddress
 import json
 import logging
 import os
+import secrets
 import struct
 import subprocess
 from collections.abc import AsyncIterator, Iterable
@@ -211,6 +212,47 @@ _HTTP_TRANSPORT: httpx.BaseTransport | None = None
 _ASYNC_HTTP_TRANSPORT: httpx.AsyncBaseTransport | None = None
 
 
+# agy >= 1.2 rejects connect-RPC calls lacking this header ("missing CSRF
+# token"). Omnigent launches agy with ``--csrf_token=<token>`` so it can send it.
+_CSRF_HEADER = "x-codeium-csrf-token"
+_CSRF_TOKEN_FILE = ".csrf_token"
+_csrf_token_cache: str | None = None
+
+
+def agy_csrf_token() -> str:
+    """
+    Return the per-user token Omnigent launches agy with and sends on every RPC.
+
+    Stored ``0600`` under the shared bridge root so the runner and the
+    ``omnigent antigravity`` CLI (separate processes) agree on it.
+
+    :returns: A random URL-safe token, created on first use.
+    """
+    global _csrf_token_cache
+    if _csrf_token_cache is not None:
+        return _csrf_token_cache
+    from omnigent.harnesses.antigravity_native.bridge import bridge_root
+
+    path = bridge_root() / _CSRF_TOKEN_FILE
+    try:
+        token = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        token = ""
+    if not token:
+        token = secrets.token_urlsafe(32)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(token)
+    _csrf_token_cache = token
+    return token
+
+
+def agy_csrf_flag() -> str:
+    """The ``--csrf_token`` launch flag matching :func:`agy_csrf_token`."""
+    return f"--csrf_token={agy_csrf_token()}"
+
+
 def _sync_client(timeout: float) -> httpx.Client:
     """
     Build a sync httpx client for a connect-RPC probe.
@@ -224,7 +266,12 @@ def _sync_client(timeout: float) -> httpx.Client:
     :returns: An ``httpx.Client`` with cert verification disabled (loopback,
         self-signed) and the test transport when one is installed.
     """
-    return httpx.Client(verify=False, timeout=timeout, transport=_HTTP_TRANSPORT)
+    return httpx.Client(
+        verify=False,
+        timeout=timeout,
+        transport=_HTTP_TRANSPORT,
+        headers={_CSRF_HEADER: agy_csrf_token()},
+    )
 
 
 def _async_client(timeout: httpx.Timeout | float) -> httpx.AsyncClient:
@@ -245,7 +292,12 @@ def _async_client(timeout: httpx.Timeout | float) -> httpx.AsyncClient:
     :returns: An ``httpx.AsyncClient`` with cert verification disabled
         (loopback, self-signed) and the test transport when one is installed.
     """
-    return httpx.AsyncClient(verify=False, timeout=timeout, transport=_ASYNC_HTTP_TRANSPORT)
+    return httpx.AsyncClient(
+        verify=False,
+        timeout=timeout,
+        transport=_ASYNC_HTTP_TRANSPORT,
+        headers={_CSRF_HEADER: agy_csrf_token()},
+    )
 
 
 def _run_lsof_listen_ports(pid: int) -> str:

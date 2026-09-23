@@ -920,6 +920,8 @@ class TerminalHost:
             list(toolbar_hints) if toolbar_hints is not None else ["esc cancel", "ctrl+c exit"]
         )
         self._tasks: list[asyncio.Task[None]] = []
+        # Subscription usage-limits row under the toolbar; ``""`` hides it.
+        self._usage_limits_line = ""
         self.theme = get_theme(theme) if isinstance(theme, str) else theme
         self._console = Console(highlight=False, theme=self.theme.rich_theme)
         self._stream_start: float | None = None
@@ -1394,6 +1396,19 @@ class TerminalHost:
         """
         self._tokens_used = tokens_used
         self._context_window = context_window
+        with contextlib.suppress(RuntimeError):
+            get_app().invalidate()
+
+    def set_usage_limits(self, line: str) -> None:
+        """
+        Set the subscription-limits row shown under the toolbar.
+
+        :param line: One-line summary, e.g. ``"Claude 5h 42% ↻15:10 · wk 18%"``;
+            ``""`` hides the row.
+        """
+        if line == self._usage_limits_line:
+            return
+        self._usage_limits_line = line
         with contextlib.suppress(RuntimeError):
             get_app().invalidate()
 
@@ -3782,4 +3797,8 @@ class TerminalHost:
             segments.append(("class:model-name", ring_segment))
         segments.append(("class:bar", "─" * bar_right))
         segments.append(("class:model-name", state_segment))
+        if self._usage_limits_line:
+            segments.append(("", "\n"))
+            limits_row = f"   {self._usage_limits_line}"[: width - 1]
+            segments.append(("class:bottom-toolbar.key", limits_row))
         return FormattedText(segments)

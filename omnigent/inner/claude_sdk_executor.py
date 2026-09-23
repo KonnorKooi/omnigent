@@ -58,6 +58,7 @@ from omnigent.models.claude_model_vocabulary import (
 )
 from omnigent.models.model_metadata import concrete_reported_model
 from omnigent.spec.types import RetryPolicy
+from omnigent.usage_limits import PROVIDER_CLAUDE, provider_report, window_from_claude_sdk_info
 from omnigent.util.json_types import JsonObject as _JsonObject
 from omnigent.util.reasoning_effort import CLAUDE_EFFORTS, validate_effort
 
@@ -2683,6 +2684,8 @@ class ClaudeSDKExecutor(Executor):
         claude_session_id: str | None = None
         compaction_transcript_path: pathlib.Path | None = None
         compaction_transcript_offset: int | None = None
+        # Subscription quota windows from ``RateLimitEvent``s, keyed by window id.
+        rate_limit_windows: dict[str, dict[str, Any]] = {}  # type: ignore[explicit-any]
 
         # Track in-flight tool calls so we can emit ToolCallComplete
         # with the tool name and duration when results arrive.
@@ -3200,6 +3203,14 @@ class ClaudeSDKExecutor(Executor):
                             yield CompactionStarted()
                         else:
                             logger.info("Claude CLI system message: %s", data)
+                    elif (rl_info := getattr(message, "rate_limit_info", None)) is not None:
+                        rl_window = window_from_claude_sdk_info(
+                            getattr(rl_info, "rate_limit_type", None),
+                            getattr(rl_info, "utilization", None),
+                            getattr(rl_info, "resets_at", None),
+                        )
+                        if rl_window is not None:
+                            rate_limit_windows[rl_window["id"]] = rl_window
             finally:
                 # ``receive_response`` returns an async generator, which
                 # always has ``aclose``; guard anyway for duck-typed test
@@ -3261,6 +3272,9 @@ class ClaudeSDKExecutor(Executor):
         # whenever it runs.
         if turn_usage is None:
             turn_usage = _usage_from_observed_call(last_call_usage, observed_model or model)
+        limits_report = provider_report(PROVIDER_CLAUDE, list(rate_limit_windows.values()))
+        if limits_report is not None and turn_usage is not None:
+            turn_usage["rate_limits"] = [limits_report]
 
         if terminal_error:
             if compaction_occurred and claude_session_id:

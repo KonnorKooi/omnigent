@@ -202,6 +202,7 @@ import {
   sessionBelongsToProject,
 } from "./sidebarNav";
 import { SidebarServerPicker } from "./SidebarServerPicker";
+import { SidebarUsageLimits } from "./SidebarUsageLimits";
 import { ForkSessionDialog } from "./ForkSessionDialog";
 import { SIDEBAR_ROW } from "./sidebarStyles";
 import { TooltipArrow } from "radix-ui/tooltip";
@@ -1264,6 +1265,8 @@ function SidebarImpl({
           list. Self-hiding: renders nothing outside a shell with the picker
           bridge (see SidebarServerPicker), so browsers keep an unchanged
           sidebar that ends with the list. */}
+            {/* Subscription quota meters; self-hiding until a harness reports. */}
+            <SidebarUsageLimits />
             <SidebarServerPicker />
           </>
         )}

@@ -117,6 +117,7 @@ from omnigent.harnesses.antigravity_native.launch import (
 from omnigent.harnesses.antigravity_native.reader import run_reader_with_bridge
 from omnigent.harnesses.antigravity_native.rpc import (
     AntigravityRpcError,
+    agy_csrf_flag,
     resolve_cold_start_agy_rpc_port,
     start_cascade,
 )
@@ -1018,7 +1019,7 @@ async def _launch_and_record(
     # under --gemini_dir, never the user's real ~/.gemini.
     await asyncio.to_thread(ensure_agy_feedback_survey_disabled, agy_home_dir(bridge_dir))
     # Lead the args so the flag is never swallowed by a later positional.
-    argv = [argv[0], f"--gemini_dir={agy_gemini_dir(bridge_dir)}", *argv[1:]]
+    argv = [argv[0], f"--gemini_dir={agy_gemini_dir(bridge_dir)}", agy_csrf_flag(), *argv[1:]]
     _update_progress(startup_progress, "Starting Antigravity terminal...")
     launched = await _launch_antigravity_terminal(
         client,

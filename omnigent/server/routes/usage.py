@@ -18,8 +18,9 @@ from omnigent.server.routes._sessions.helpers import (
     _resolve_harness_impl,
     _resolve_llm_model,
 )
-from omnigent.server.schemas import DailyCost, SessionUsage, UsageReport
+from omnigent.server.schemas import DailyCost, SessionUsage, UsageLimitsReport, UsageReport
 from omnigent.stores import ConversationStore
+from omnigent.usage_limits import USAGE_LIMITS_CACHE
 
 # The daily rollup floor for an "all-time" sum: earlier than any real row, so
 # ``sum_daily_cost`` with this lower bound totals every recorded day.
@@ -250,5 +251,17 @@ def create_usage_router(
             user_id,
             include_page_details=flags.enabled(Feature.USAGE_PAGE),
         )
+
+    @router.get("/usage/limits", response_model=UsageLimitsReport)
+    async def get_usage_limits(request: Request) -> UsageLimitsReport:
+        """
+        Return the caller's latest subscription quota windows per provider.
+
+        Values are cached in memory from harness turns (no provider calls), so
+        a provider appears only after a turn has run on it since server start.
+        """
+        user_id = require_user(request, auth_provider)
+        owner = user_id if user_id is not None else RESERVED_USER_LOCAL
+        return UsageLimitsReport.model_validate({"providers": USAGE_LIMITS_CACHE.snapshot(owner)})
 
     return router

@@ -84,3 +84,48 @@ export async function fetchUsageReport(): Promise<UsageReport> {
     })),
   };
 }
+
+// ── Subscription limits ─────────────────────────────────────────
+
+interface UsageLimitWindowWire {
+  id: string;
+  label: string;
+  used_percent: number | null;
+  resets_at: number | null;
+}
+
+interface UsageLimitsReportWire {
+  providers: { provider: string; windows: UsageLimitWindowWire[]; updated_at: number }[];
+}
+
+export interface UsageLimitWindow {
+  id: string;
+  label: string;
+  /** Percent consumed (0–100); null when the window reset since the last reading. */
+  usedPercent: number | null;
+  /** Unix seconds when the window resets. */
+  resetsAt: number | null;
+}
+
+export interface UsageLimitProvider {
+  provider: string;
+  windows: UsageLimitWindow[];
+  updatedAt: number;
+}
+
+/** Latest subscription quota windows the server has seen from harness turns. */
+export async function fetchUsageLimits(): Promise<UsageLimitProvider[]> {
+  const res = await authenticatedFetch("/v1/usage/limits");
+  if (!res.ok) throw new Error(`Usage limits fetch failed: ${res.status}`);
+  const wire: UsageLimitsReportWire = await res.json();
+  return (wire.providers ?? []).map((p) => ({
+    provider: p.provider,
+    updatedAt: p.updated_at,
+    windows: (p.windows ?? []).map((w) => ({
+      id: w.id,
+      label: w.label,
+      usedPercent: w.used_percent,
+      resetsAt: w.resets_at,
+    })),
+  }));
+}

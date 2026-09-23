@@ -1858,6 +1858,8 @@ class HarnessApp:
                 # Authoritative per-turn cost reported by the harness (e.g. Copilot
                 # AI credits); preferred over the catalog estimate. None if absent.
                 cost_usd=u.get("cost_usd"),
+                # Subscription quota windows (claude-sdk / codex) for the limits footer.
+                rate_limits=u.get("rate_limits"),
             )
         response = ResponseObject(
             id=ctx.response_id,

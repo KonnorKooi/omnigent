@@ -5107,6 +5107,7 @@ async def _auto_create_antigravity_terminal(
         write_tmux_target,
     )
     from omnigent.harnesses.antigravity_native.launch import build_agy_launch
+    from omnigent.harnesses.antigravity_native.rpc import agy_csrf_flag
     from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
 
     if server_client is None:
@@ -5222,7 +5223,7 @@ async def _auto_create_antigravity_terminal(
     # /.gemini/antigravity-cli/settings.json to its arg), NOT the user's real
     # HOME — env_overrides no longer carries a HOME key.
     await asyncio.to_thread(ensure_agy_feedback_survey_disabled, agy_home_dir(bridge_dir))
-    argv = [argv[0], f"--gemini_dir={agy_gemini_dir(bridge_dir)}", *argv[1:]]
+    argv = [argv[0], f"--gemini_dir={agy_gemini_dir(bridge_dir)}", agy_csrf_flag(), *argv[1:]]
     # Start the shared comment/sys_* relay against THIS session's bridge dir before
     # launch so its tool_relay.json is on disk when agy first scans the MCP server.
     # ``await_notify=False``: agy starts its MCP client lazily, so awaiting the

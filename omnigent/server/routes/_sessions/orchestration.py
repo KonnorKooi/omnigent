@@ -294,6 +294,7 @@ from omnigent.server.routes._sessions.helpers import (
     _query_host_runner_status,
     _read_state_entry,
     _record_daily_cost,
+    _record_usage_limits,
     _reject_reserved_cost_control_label_seed,
     _reject_server_reserved_label_seed,
     _relay_persist,
@@ -1694,6 +1695,21 @@ async def _persist_external_session_usage(
         "cumulative_output_tokens",
     )
     has_cumulative = any(body.data.get(k) is not None for k in _CUMULATIVE_USAGE_KEYS)
+    raw_limits = body.data.get("rate_limits")
+    if raw_limits is not None:
+        if not isinstance(raw_limits, list):
+            raise OmnigentError(
+                "external_session_usage data.rate_limits must be a list",
+                code=ErrorCode.INVALID_INPUT,
+            )
+        await asyncio.to_thread(
+            _record_usage_limits,
+            conversation_store.get_conversation(session_id),
+            raw_limits,
+            conversation_store,
+        )
+        if raw_tokens is None and raw_window is None and not has_cumulative:
+            return None
     if raw_tokens is None and raw_window is None and not has_cumulative:
         raise OmnigentError(
             "external_session_usage requires at least one of "
@@ -6803,6 +6819,14 @@ async def _relay_runner_stream_once(
                                 session_id,
                                 conversation_store,
                             )
+                            _limits = (_terminal_response.get("usage") or {}).get("rate_limits")
+                            if _limits:
+                                await asyncio.to_thread(
+                                    _record_usage_limits,
+                                    conversation_store.get_conversation(session_id),
+                                    _limits,
+                                    conversation_store,
+                                )
                     if evt_type == "response.completed":
                         # Persist the turn's usage (cost + token buckets) so
                         # policy callables can read

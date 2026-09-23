@@ -70,6 +70,7 @@ from rich.text import Text
 
 from omnigent.cli_invocation import cli_invocation
 from omnigent.spec.types import SkillSpec
+from omnigent.usage_limits import format_limits_line
 
 if TYPE_CHECKING:
     from omnigent_client._tool_handler import ToolCallInfo
@@ -225,6 +226,10 @@ _LIST_ITEMS_PAGE_SIZE = 100
 # session's direct children) while sub-agents are active.
 _MAX_SUBAGENT_TREE_DEPTH = 3
 _SUBAGENT_POLL_SECONDS = 2.0
+# Subscription-limits toolbar row: an in-memory server read, so a short cadence
+# keeps it current right after a turn reports fresh windows.
+_USAGE_LIMITS_POLL_SECONDS = 15.0
+_USAGE_LIMITS_TIMEOUT_S = 3.0
 
 
 def _load_startup_theme() -> TerminalTheme:
@@ -4444,6 +4449,21 @@ async def run_repl(
                 pass
             await asyncio.sleep(_SUBAGENT_POLL_SECONDS)
 
+    async def _usage_limits_poll_loop() -> None:
+        # Mirror the server's cached subscription-limit windows into the
+        # toolbar row; the reset clock re-renders even when values don't move.
+        set_limits = getattr(host, "set_usage_limits", None)
+        if set_limits is None:
+            return
+        while True:
+            with contextlib.suppress(Exception):
+                resp = await client._http.get(
+                    f"{client._base_url}/v1/usage/limits", timeout=_USAGE_LIMITS_TIMEOUT_S
+                )
+                if resp.status_code == 200:
+                    set_limits(format_limits_line(resp.json().get("providers")))
+            await asyncio.sleep(_USAGE_LIMITS_POLL_SECONDS)
+
     async def _open_subagent_by_id(target_id: str) -> None:
         # Invoked by the host when the user picks a row in the inline ↓ menu
         # or presses Left to go back. Runs between prompt iterations, so
@@ -4669,12 +4689,14 @@ async def run_repl(
         # Background poll that keeps the sub-agent tree (badge + ↓ menu)
         # current at nested depths for the lifetime of ``host.run``.
         subagent_poll_task = asyncio.create_task(_subagent_poll_loop())
+        usage_limits_task = asyncio.create_task(_usage_limits_poll_loop())
         try:
             await host.run(on_input)
         finally:
-            subagent_poll_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await subagent_poll_task
+            for _poll_task in (subagent_poll_task, usage_limits_task):
+                _poll_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await _poll_task
             if auto_send_task is not None and not auto_send_task.done():
                 auto_send_task.cancel()
             for _task in list(_background_event_tasks):

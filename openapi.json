@@ -8910,6 +8910,23 @@
             "$ref": "#/components/schemas/UsageDetails",
             "description": "Breakdown of output token usage (e.g. reasoning tokens)."
           },
+          "rate_limits": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Subscription quota windows the harness observed this turn (see `omnigent.usage_limits`), e.g. `[{\"provider\": \"claude\", \"windows\": [...]}]`. `None` when not reported.",
+            "title": "Rate Limits"
+          },
           "total_tokens": {
             "default": 0,
             "description": "Sum of input and output tokens across all LLM sub-calls for this turn (billing total).",
@@ -8933,6 +8950,102 @@
           }
         },
         "title": "UsageDetails",
+        "type": "object"
+      },
+      "UsageLimitProvider": {
+        "description": "Latest quota windows one provider reported for the caller.",
+        "properties": {
+          "provider": {
+            "description": "`\"claude\"`, `\"codex\"` or `\"antigravity\"`.",
+            "title": "Provider",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "Unix seconds of the most recent report.",
+            "format": "int64",
+            "title": "Updated At",
+            "type": "integer"
+          },
+          "windows": {
+            "description": "The provider's windows in report order.",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimitWindow"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider",
+          "windows",
+          "updated_at"
+        ],
+        "title": "UsageLimitProvider",
+        "type": "object"
+      },
+      "UsageLimitWindow": {
+        "description": "One subscription quota window, e.g. Claude's rolling 5-hour limit.",
+        "properties": {
+          "id": {
+            "description": "Provider window id, e.g. `\"five_hour\"` or `\"primary\"`.",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "description": "Short display label, e.g. `\"5h\"` or `\"wk\"`.",
+            "title": "Label",
+            "type": "string"
+          },
+          "resets_at": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unix seconds when the window resets, if known.",
+            "title": "Resets At"
+          },
+          "used_percent": {
+            "anyOf": [
+              {
+                "format": "double",
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Percent of the window consumed (0-100), or `None` when the window has reset since the last reading.",
+            "title": "Used Percent"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "UsageLimitWindow",
+        "type": "object"
+      },
+      "UsageLimitsReport": {
+        "description": "Subscription usage limits observed passively from harness turns.",
+        "properties": {
+          "providers": {
+            "description": "Providers with at least one report, in display order.",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimitProvider"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "UsageLimitsReport",
         "type": "object"
       },
       "UsageReport": {
@@ -17140,6 +17253,28 @@
           }
         },
         "summary": "Get Usage",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/limits": {
+      "get": {
+        "description": "Return the caller's latest subscription quota windows per provider.\n\nValues are cached in memory from harness turns (no provider calls), so\na provider appears only after a turn has run on it since server start.",
+        "operationId": "get_usage_limits_v1_usage_limits_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageLimitsReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Usage Limits",
         "tags": [
           "usage"
         ]

@@ -60,6 +60,11 @@ from omnigent.native._native_post_delivery import (
     post_may_have_been_delivered,
     replay_dead_letters,
 )
+from omnigent.usage_limits import (
+    PROVIDER_CODEX,
+    provider_report,
+    windows_from_codex_rate_limits,
+)
 from omnigent.util.json_types import JsonObject as _JsonObject
 
 _logger = logging.getLogger(__name__)
@@ -159,6 +164,8 @@ _CODEX_MCP_ELICITATION_REQUEST_METHOD = "mcpServer/elicitation/request"
 _CODEX_MCP_STARTUP_STATUS_METHOD = "mcpServer/startupStatus/updated"
 _CODEX_THREAD_STATUS_CHANGED_METHOD = "thread/status/changed"
 _EXTERNAL_MCP_STARTUP_TYPE = "external_mcp_startup"
+# App-server notification carrying the account's plan quota windows.
+_CODEX_RATE_LIMITS_METHOD = "account/rateLimits/updated"
 # Codex bounds each MCP server's spawn+handshake by its per-server
 # ``startup_timeout_sec`` (codex default 10s); the round cannot outlive
 # the slowest server's budget. The synthesis settle timer mirrors that
@@ -2815,6 +2822,24 @@ async def _handle_event(
                 child_thread_id,
                 _parent_thread_id_from_started_event(event),
             )
+        return
+    if method == _CODEX_RATE_LIMITS_METHOD:
+        # Account-level quota (no threadId): report on the parent session.
+        limits_report = provider_report(
+            PROVIDER_CODEX, windows_from_codex_rate_limits(params.get("rateLimits"))
+        )
+        if limits_report is not None:
+            response = await _post_session_event(
+                client,
+                (
+                    forwarder_state.parent_session_id
+                    if forwarder_state is not None and forwarder_state.parent_session_id
+                    else session_id
+                ),
+                event_type="external_session_usage",
+                data={"rate_limits": [limits_report]},
+            )
+            _log_failed_session_event_post("external_session_usage", response)
         return
     if method == _CODEX_MCP_STARTUP_STATUS_METHOD:
         # MCP startup is bridge-level state, surfaced on the parent
