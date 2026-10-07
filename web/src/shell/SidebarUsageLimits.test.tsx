@@ -16,7 +16,10 @@ function renderLimits() {
 }
 
 describe("SidebarUsageLimits", () => {
-  beforeEach(() => fetchUsageLimits.mockReset());
+  beforeEach(() => {
+    fetchUsageLimits.mockReset();
+    window.localStorage.clear();
+  });
 
   it("renders nothing until a provider has reported", async () => {
     fetchUsageLimits.mockResolvedValue([]);
@@ -48,6 +51,57 @@ describe("SidebarUsageLimits", () => {
     expect(screen.getByText("42%")).toBeInTheDocument();
     expect(screen.getByText("91%")).toBeInTheDocument();
     expect(screen.getByText("–")).toBeInTheDocument();
+  });
+
+  it("paints the cached report before the fetch resolves", () => {
+    window.localStorage.setItem(
+      "omnigent.usageLimits",
+      JSON.stringify([
+        {
+          provider: "claude",
+          updatedAt: 0,
+          windows: [{ id: "five_hour", label: "5h", usedPercent: 33, resetsAt: null }],
+        },
+      ]),
+    );
+    fetchUsageLimits.mockReturnValue(new Promise(() => {}));
+    renderLimits();
+    expect(screen.getByTestId("sidebar-usage-limits")).toBeInTheDocument();
+    expect(screen.getByText("33%")).toBeInTheDocument();
+  });
+
+  it("keeps the last values when the server's cache is empty", async () => {
+    fetchUsageLimits.mockResolvedValueOnce([
+      {
+        provider: "codex",
+        updatedAt: 0,
+        windows: [{ id: "primary", label: "5h", usedPercent: 12, resetsAt: null }],
+      },
+    ]);
+    const first = renderLimits();
+    expect(await screen.findByText("12%")).toBeInTheDocument();
+    first.unmount();
+    fetchUsageLimits.mockResolvedValue([]);
+    renderLimits();
+    await vi.waitFor(() => expect(fetchUsageLimits).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("12%")).toBeInTheDocument();
+  });
+
+  it("shows a dash for a cached window whose reset has passed", () => {
+    window.localStorage.setItem(
+      "omnigent.usageLimits",
+      JSON.stringify([
+        {
+          provider: "claude",
+          updatedAt: 0,
+          windows: [{ id: "five_hour", label: "5h", usedPercent: 80, resetsAt: 1 }],
+        },
+      ]),
+    );
+    fetchUsageLimits.mockReturnValue(new Promise(() => {}));
+    renderLimits();
+    expect(screen.getByText("–")).toBeInTheDocument();
+    expect(screen.queryByText("80%")).not.toBeInTheDocument();
   });
 
   it("formats near resets as a clock time and far ones with a weekday", () => {

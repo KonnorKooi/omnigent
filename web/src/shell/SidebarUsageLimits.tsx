@@ -1,8 +1,38 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchUsageLimits, type UsageLimitWindow } from "@/lib/usageApi";
+import { fetchUsageLimits, type UsageLimitProvider, type UsageLimitWindow } from "@/lib/usageApi";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 30_000;
+const STORAGE_KEY = "omnigent.usageLimits";
+
+/** Last non-empty report, so the footer paints instantly on page load. */
+function readCached(): UsageLimitProvider[] | undefined {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : undefined;
+    return Array.isArray(parsed) && parsed.length > 0
+      ? (parsed as UsageLimitProvider[])
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeCached(providers: UsageLimitProvider[]): void {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(providers));
+  } catch {
+    // Storage blocked or full: the footer just loads without the head start.
+  }
+}
+
+/** Fetch fresh limits; a server with an empty cache (e.g. just restarted) keeps the last values. */
+async function loadUsageLimits(): Promise<UsageLimitProvider[]> {
+  const fresh = await fetchUsageLimits();
+  if (fresh.length === 0) return readCached() ?? [];
+  writeCached(fresh);
+  return fresh;
+}
 
 const PROVIDER_NAMES: Record<string, string> = {
   claude: "Claude",
@@ -25,12 +55,14 @@ function meterTone(pct: number): string {
 }
 
 function LimitWindow({ window }: { window: UsageLimitWindow }) {
-  const pct = window.usedPercent;
+  // A cached reading whose window has since reset no longer reflects usage.
+  const elapsed = window.resetsAt !== null && window.resetsAt * 1000 <= Date.now();
+  const pct = elapsed ? null : window.usedPercent;
   const title =
     pct === null
       ? `${window.label}: reset — waiting for the next turn`
       : `${window.label}: ${Math.round(pct)}% used` +
-        (window.resetsAt ? ` · resets ${formatReset(window.resetsAt)}` : "");
+        (window.resetsAt && !elapsed ? ` · resets ${formatReset(window.resetsAt)}` : "");
   return (
     <div className="flex min-w-0 items-center gap-1.5" title={title}>
       <span className="min-w-0 shrink truncate">{window.label}</span>
@@ -53,9 +85,12 @@ function LimitWindow({ window }: { window: UsageLimitWindow }) {
 export function SidebarUsageLimits() {
   const { data } = useQuery({
     queryKey: ["usage-limits"],
-    queryFn: fetchUsageLimits,
+    queryFn: loadUsageLimits,
+    // Paint the last known values immediately, then refresh in the background.
+    initialData: readCached,
+    initialDataUpdatedAt: 0,
     refetchInterval: POLL_MS,
-    // A failing server (older build without the route) just hides the footer.
+    // A failing fetch keeps showing the last known values (or nothing yet).
     retry: false,
   });
   if (!data || data.length === 0) return null;
