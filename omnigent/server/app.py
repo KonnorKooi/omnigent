@@ -87,7 +87,6 @@ from omnigent.server.routes.default_policies import create_default_policies_rout
 from omnigent.server.routes.dictation import create_dictation_router
 from omnigent.server.routes.extension_assets import create_extension_assets_router
 from omnigent.server.routes.extensions import create_extensions_router
-from omnigent.server.routes.governance import create_governance_router
 from omnigent.server.routes.harnesses import create_harnesses_router
 from omnigent.server.routes.imports import create_imports_router
 from omnigent.server.routes.mcp_config import create_mcp_config_router
@@ -119,9 +118,6 @@ from omnigent.stores import (
 )
 from omnigent.stores.comment_store import CommentStore
 from omnigent.stores.conversation_store import SessionConnectivity, runner_seen_is_fresh
-from omnigent.stores.governance_audit_store.sqlalchemy_store import (
-    SqlAlchemyGovernanceAuditStore,
-)
 from omnigent.stores.host_store import HostStore
 from omnigent.stores.permission_store import PermissionStore
 from omnigent.stores.policy_store import PolicyStore
@@ -2799,20 +2795,6 @@ def create_app(
         create_policy_registry_router(auth_provider=auth_provider),
         prefix="/v1",
         tags=["policy_registry"],
-    )
-    # Admin-only, server-wide session listing and read-only transcript access.
-    # The access log lives in the main Omnigent database alongside permissions,
-    # so it is built from the conversation store's location (its first
-    # storage_location IS that database) rather than injected separately.
-    app.include_router(
-        create_governance_router(
-            conversation_store,
-            SqlAlchemyGovernanceAuditStore(conversation_store.storage_location),
-            auth_provider=auth_provider,
-            permission_store=permission_store,
-        ),
-        prefix="/v1",
-        tags=["governance"],
     )
     # Settings → MCP Servers. Lists/adds/removes/probes the MCP servers
     # registered with the harness CLIs on a HOST (proxied over the host

@@ -16,7 +16,6 @@ import {
   KeyboardIcon,
   PaletteIcon,
   PlugIcon,
-  ScrollTextIcon,
   SettingsIcon,
   Share2Icon,
   ShieldCheckIcon,
@@ -42,7 +41,6 @@ export type SettingsSectionId =
   | "import"
   | "mcp"
   | "account"
-  | "governance"
   | "members"
   | "policies"
   | "sharing"
@@ -59,7 +57,6 @@ const SECTION_IDS: readonly SettingsSectionId[] = [
   "import",
   "mcp",
   "account",
-  "governance",
   "members",
   "policies",
   "sharing",
@@ -147,11 +144,6 @@ export function settingsNavGroups(
     const adminItems: SettingsNavItem[] = [];
     if (!isSingleUser) adminItems.push({ id: "members", label: "Members", icon: UsersIcon });
     adminItems.push({ id: "policies", label: "Policies", icon: ShieldCheckIcon });
-    // Governance lists EVERY user's sessions, so it is meaningless (and has
-    // nothing extra to show) in single-user mode, where they are all yours.
-    if (!isSingleUser) {
-      adminItems.push({ id: "governance", label: "Governance", icon: ScrollTextIcon });
-    }
     if (!isSingleUser) adminItems.push({ id: "sharing", label: "Sharing", icon: Share2Icon });
     groups.push({ title: "Admin", items: adminItems });
   }
@@ -180,13 +172,12 @@ export function useSettingsRoute(): { inSettings: boolean; section: SettingsSect
   // Members / Policies / Sharing are admin sections valid in ANY multi-user
   // mode (accounts AND OIDC). They're gated in the nav on `is_admin` and the
   // pages self-gate + the server 403s, so no accounts-mode carve-out here.
-  // Members, Sharing and Governance are the exception: single-user mode has
-  // no other users, so a direct hit to any of them falls back to the default
-  // section — matching the nav, which omits all three there.
+  // Members and Sharing are the exception: single-user mode has no other
+  // users, so a direct hit to either falls back to the default section.
   const singleUser = isSingleUserMode(info);
   const isValidSection =
     (SECTION_IDS as readonly string[]).includes(next) &&
-    !(singleUser && (next === "members" || next === "sharing" || next === "governance"));
+    !(singleUser && (next === "members" || next === "sharing"));
   const section = isValidSection ? (next as SettingsSectionId) : defaultSection;
   return { inSettings: true, section };
 }

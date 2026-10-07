@@ -2609,166 +2609,6 @@
         "title": "FunctionCallOutputData",
         "type": "object"
       },
-      "GovernanceSessionItem": {
-        "description": "One session as the governance table renders it.",
-        "properties": {
-          "agent_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Agent Id"
-          },
-          "created_at": {
-            "format": "int64",
-            "title": "Created At",
-            "type": "integer"
-          },
-          "external_session_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "External Session Id"
-          },
-          "git_branch": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Git Branch"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "item_count": {
-            "format": "int64",
-            "title": "Item Count",
-            "type": "integer"
-          },
-          "owner": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "total_cost_usd": {
-            "anyOf": [
-              {
-                "format": "double",
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "`None` means the session was never priced, which is a different answer from a genuine `0.0` \u2014 the UI shows an em dash for the former.",
-            "title": "Total Cost Usd"
-          },
-          "updated_at": {
-            "format": "int64",
-            "title": "Updated At",
-            "type": "integer"
-          },
-          "workspace": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workspace"
-          }
-        },
-        "required": [
-          "id",
-          "source",
-          "item_count",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "GovernanceSessionItem",
-        "type": "object"
-      },
-      "GovernanceSessionList": {
-        "description": "One cursor-paged slice of the server-wide session list.",
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/GovernanceSessionItem"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "first_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Id"
-          },
-          "has_more": {
-            "default": false,
-            "title": "Has More",
-            "type": "boolean"
-          },
-          "last_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Id"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "title": "GovernanceSessionList",
-        "type": "object"
-      },
       "GrantPermissionRequest": {
         "description": "Request body for `PUT /v1/sessions/{id}/permissions`.",
         "properties": {
@@ -9607,268 +9447,6 @@
         ]
       }
     },
-    "/v1/governance/sessions": {
-      "get": {
-        "description": "List every user's top-level sessions, newest first.\n\nSub-agent sessions are omitted \u2014 they are audited through the\nparent session that spawned them.\n\nCursors track the store's page, not the rows left after the\nin-Python source trim. A page the trim empties completely must\nstill hand back an id to resume from, or the caller sees\n`has_more` with nothing to page on and stops early \u2014 silently\nhiding later matches on a surface whose whole job is to hide\nnothing. Rows the trim dropped were evaluated and rejected, so\nresuming past them skips nothing.\n\n**Returns:** One cursor-paged slice of the server-wide list.",
-        "operationId": "list_governance_sessions_v1_governance_sessions_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
-            "name": "owner",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Owner"
-            }
-          },
-          {
-            "in": "query",
-            "name": "agent_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Agent Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace_prefix",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Workspace Prefix"
-            }
-          },
-          {
-            "in": "query",
-            "name": "updated_after",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Updated After"
-            }
-          },
-          {
-            "in": "query",
-            "name": "updated_before",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Updated Before"
-            }
-          },
-          {
-            "in": "query",
-            "name": "search_query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Search Query"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "after",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "After"
-            }
-          },
-          {
-            "in": "query",
-            "name": "before",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Before"
-            }
-          },
-          {
-            "in": "query",
-            "name": "order",
-            "required": false,
-            "schema": {
-              "default": "desc",
-              "pattern": "^(asc|desc)$",
-              "title": "Order",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort_by",
-            "required": false,
-            "schema": {
-              "default": "updated_at",
-              "pattern": "^(created_at|updated_at)$",
-              "title": "Sort By",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GovernanceSessionList"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Governance Sessions",
-        "tags": [
-          "governance"
-        ]
-      }
-    },
-    "/v1/governance/sessions/{session_id}": {
-      "get": {
-        "description": "Return one session's governance row, whoever owns it.\n\n**Returns:** The same row the listing would show for this session.",
-        "operationId": "get_governance_session_v1_governance_sessions__session_id__get",
-        "parameters": [
-          {
-            "description": "The session to inspect, e.g. `\"conv_abc123\"`.",
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GovernanceSessionItem"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Governance Session",
-        "tags": [
-          "governance"
-        ]
-      }
-    },
     "/v1/harnesses": {
       "get": {
         "operationId": "list_harnesses_v1_harnesses_get",
@@ -12146,7 +11724,7 @@
     },
     "/v1/projects/{project_id}/context/preview": {
       "get": {
-        "description": "Return the exact startup text sessions in this project receive.\n\n**Returns:** See `ContextService.injected_context`.",
+        "description": "Return the exact startup text sessions in this project receive.\n\n**Returns:** See `ContextService.injected_context`, plus `skipped_by_harness`: profile files each harness loads natively and so does not receive here.",
         "operationId": "preview_injected_context_v1_projects__project_id__context_preview_get",
         "parameters": [
           {
@@ -14320,6 +13898,24 @@
             "schema": {
               "title": "Session Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Harness being launched, e.g. `\"claude-native\"`; profile files it loads natively are left out.",
+            "in": "query",
+            "name": "harness",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness"
             }
           }
         ],
